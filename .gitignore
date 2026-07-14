@@ -1,0 +1,5 @@
+.streamlit/secrets.toml
+training_portal.db
+__pycache__/
+*.pyc
+.DS_Store
