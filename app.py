@@ -16,10 +16,61 @@ db.init_db()
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* Headings use the same display face as the HTML version */
+h1, h2, h3, .stTabs [data-baseweb="tab"] p {
+    font-family: 'Space Grotesk', sans-serif !important;
+}
+
+/* Buttons (this also styles the calendar day cells, since they're st.button) */
+.stButton>button {
+    background-color:#1F2E28;
+    border:1px solid #2A3A34;
+    color:#EAF2EE;
+    border-radius:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+}
+.stButton>button:hover {
+    border-color:#FF7A45;
+    color:#FF7A45;
+}
+/* "today" and primary actions use the orange accent, like the 14 in the mock */
+.stButton>button[kind="primary"] {
+    background-color:#2A1810;
+    border:1px solid #FF7A45;
+    color:#FF7A45;
+}
+
+/* Tab bar → looks like the PART 01 / PART 02 cards */
+.stTabs [data-baseweb="tab-list"]{ gap:8px; }
+.stTabs [data-baseweb="tab"]{
+    background-color:#182420;
+    border:1px solid #2A3A34;
+    border-radius:10px;
+    padding:10px 20px;
+}
+.stTabs [aria-selected="true"]{
+    border-color:#FF7A45 !important;
+    background-color:#1F2E28 !important;
+}
+
+/* Cards (containers with a border) */
+[data-testid="stForm"], div[data-testid="stExpander"]{
+    background-color:#182420;
+    border:1px solid #2A3A34;
+    border-radius:14px;
+}
+
+/* Data tables in the mono/ledger style */
+[data-testid="stDataFrame"] * { font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+
 .stamp-badge{
-    display:inline-block;border:2px solid #2E7D32;color:#2E7D32;border-radius:50%;
+    display:inline-block;border:2px solid #6EE7B7;color:#6EE7B7;border-radius:50%;
     width:74px;height:74px;text-align:center;line-height:1.1;padding-top:20px;
     font-weight:700;font-size:11px;letter-spacing:.5px;transform:rotate(-6deg);
+    font-family:'Space Grotesk', sans-serif;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -119,8 +170,10 @@ with tab1:
                 else:
                     d_str = f"{year}-{month:02d}-{day_num:02d}"
                     has_entry = d_str in entries_by_date
+                    is_today = d_str == date.today().isoformat()
                     label = f"{day_num} 🟢" if has_entry else f"{day_num}"
-                    if st.button(label, key=f"day_{d_str}", use_container_width=True):
+                    if st.button(label, key=f"day_{d_str}", use_container_width=True,
+                                 type="primary" if is_today else "secondary"):
                         st.session_state.selected_date = d_str
 
     st.divider()
