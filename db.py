@@ -147,3 +147,48 @@ def get_trainees():
     rows = conn.execute("SELECT * FROM trainees").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+    # --- INDUCTION SCHEDULE & ROSTER HELPER ---
+def upsert_induction_schedule(sched: dict):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO induction_schedule (id, date, time_slot, activity_type, topic_id, manual_activity)
+        VALUES (:id, :date, :time_slot, :activity_type, :topic_id, :manual_activity)
+        ON CONFLICT(id) DO UPDATE SET
+            time_slot=excluded.time_slot, activity_type=excluded.activity_type,
+            topic_id=excluded.topic_id, manual_activity=excluded.manual_activity
+    """, sched)
+    conn.commit()
+    conn.close()
+
+def get_induction_schedule_by_date(target_date: str):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT s.*, t.name as topic_name, t.duration 
+        FROM induction_schedule s
+        LEFT JOIN topics t ON s.topic_id = t.id
+        WHERE s.date = ?
+    """, (target_date,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+# --- EVALUATION ENGINE FUNCTIONS ---
+def upsert_trainee_evaluation(eval_data: dict):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO trainee_evaluations (id, empid, date, quiz_score, assignment_score, notes)
+        VALUES (:id, :empid, :date, :quiz_score, :assignment_score, :notes)
+        ON CONFLICT(id) DO UPDATE SET
+            quiz_score=excluded.quiz_score, assignment_score=excluded.assignment_score, notes=excluded.notes
+    """, eval_data)
+    conn.commit()
+    conn.close()
+
+def get_all_evaluations():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT e.*, t.name as trainee_name, t.channel
+        FROM trainee_evaluations e
+        JOIN trainees t ON e.empid = t.empid
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
