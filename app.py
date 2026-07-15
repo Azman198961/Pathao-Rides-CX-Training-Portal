@@ -188,8 +188,222 @@ if is_admin_view:
     # ==========================================
     # 2. INDUCTION TRAINING (PLACEHOLDER)
     # ==========================================
+   # ==========================================
+    # 2. INDUCTION TRAINING (LAYERS 1 - 4)
+    # ==========================================
     with admin_tab2:
-        st.info("Step 2 Layer Integration: Roster grids, daily planners, and dynamic onboarding matrix will load here.")
+        st.header("Induction Training Dashboard (New Joiners)")
+        
+        ind_l1, ind_l2, ind_l3, ind_l4 = st.tabs([
+            "👥 L1: Trainee Onboarding", 
+            "📅 L2: Training Timeline", 
+            "⚡ L3: Daily Schedule & Grading", 
+            "📊 L4: Performance Report"
+        ])
+        
+        # ---------------------------------------------------------
+        # LAYER 1: Trainee Information Onboarding
+        # ---------------------------------------------------------
+        with ind_l1:
+            st.subheader("Layer 1: Onboard New Joiners")
+            col_b1, col_b2 = st.columns([1, 1])
+            
+            with col_b1:
+                st.markdown("#### Individual Trainee Entry")
+                with st.form("single_trainee_form", clear_on_submit=True):
+                    t_id = st.text_input("Employee ID *")
+                    t_name = st.text_input("Full Name *")
+                    t_email = st.text_input("Email Address")
+                    t_phone = st.text_input("Phone Number")
+                    t_date = st.date_input("Joining Date", value=date.today())
+                    t_chan = st.selectbox("Assigned Channel *", ["Voice", "Chat", "Email"])
+                    
+                    if st.form_submit_button("Add Trainee"):
+                        if not t_id or not t_name:
+                            st.error("Employee ID and Name are mandatory.")
+                        else:
+                            db.insert_trainees([{
+                                "empid": t_id.strip(), "name": t_name.strip(),
+                                "email": t_email.strip(), "phone": t_phone.strip(),
+                                "joining_date": t_date.isoformat(), "channel": t_chan
+                            }])
+                            st.success(f"Trainee {t_name} securely onboarded.")
+                            st.rerun()
+            
+            with col_b2:
+                st.markdown("#### Bulk Import via CSV")
+                st.caption("CSV format requirements: empid, name, email, phone, joining_date, channel")
+                uploaded_csv = st.file_uploader("Upload Onboarding Document", type=["csv"])
+                if uploaded_csv:
+                    try:
+                        csv_df = pd.read_csv(uploaded_csv)
+                        required_cols = ["empid", "name", "email", "phone", "joining_date", "channel"]
+                        if all(col in csv_df.columns for col in required_cols):
+                            trainee_list = csv_df[required_cols].to_dict(orient="records")
+                            db.insert_trainees(trainee_list)
+                            st.success(f"Successfully processed and updated {len(trainee_list)} trainees.")
+                            st.rerun()
+                        else:
+                            st.error(f"Missing headers. CSV requires exactly: {required_cols}")
+                    except Exception as e:
+                        st.error(f"Error parse execution: {str(e)}")
+            
+            st.divider()
+            st.markdown("#### Currently Active Class Roster")
+            current_trainees = db.get_trainees()
+            if current_trainees:
+                st.dataframe(pd.DataFrame(current_trainees), use_container_width=True, hide_index=True)
+            else:
+                st.caption("No trainees currently exist in the database roster.")
+
+        # ---------------------------------------------------------
+        # LAYER 2: Training Duration (Timeline Grid)
+        # ---------------------------------------------------------
+        with ind_l2:
+            st.subheader("Layer 2: Timeline Setup")
+            col_time1, col_time2 = st.columns([1, 2])
+            
+            with col_time1:
+                start_range = st.date_input("Training Batch Start Date", key="ind_start")
+                end_range = st.date_input("Training Batch End Date", key="ind_end")
+                
+            with col_time2:
+                if start_range <= end_range:
+                    delta_days = (end_range - start_range).days + 1
+                    st.info(f"Interactive timeline generated dynamically: **{delta_days} Training Days** configured.")
+                    
+                    # Interactive Calendar Grid Generator
+                    st.markdown("#### Batch Timeline Grid Selector")
+                    grid_cols = st.columns(min(7, delta_days))
+                    for day_idx in range(delta_days):
+                        current_day = start_range + pd.Timedelta(days=day_idx)
+                        day_str = current_day.isoformat()
+                        col_pos = day_idx % 7
+                        
+                        with grid_cols[col_pos]:
+                            if st.button(f"📅 Day {day_idx+1}\n{current_day.strftime('%b %d')}", key=f"timeline_{day_str}", use_container_width=True):
+                                st.session_state.active_induction_date = day_str
+                                st.success(f"Selected target day: {day_str}")
+                else:
+                    st.error("Error: End date must fall ahead or equal to start date timeline parameters.")
+
+        # ---------------------------------------------------------
+        # LAYER 3: Daily Calendar Schedule & Evaluation Engine
+        # ---------------------------------------------------------
+        with ind_l3:
+            target_date = st.session_state.get("active_induction_date", None)
+            if not target_date:
+                st.warning("⚠️ Please pick an active target day from the Timeline Grid under 'L2: Training Timeline' first.")
+            else:
+                st.subheader(f"Layer 3: Target Operations for Roster Day [{target_date}]")
+                
+                c_sched1, c_sched2 = st.columns([2, 3])
+                
+                with c_sched1:
+                    st.markdown("#### Hourly Activity Planner (11:00 AM - 08:00 PM)")
+                    hours_slots = [
+                        "11:00 AM - 12:00 PM", "12:00 PM - 01:00 PM", "01:00 PM - 02:00 PM",
+                        "02:00 PM - 03:00 PM", "03:00 PM - 04:00 PM", "04:00 PM - 05:00 PM",
+                        "05:00 PM - 06:00 PM", "06:00 PM - 07:00 PM", "07:00 PM - 08:00 PM"
+                    ]
+                    
+                    with st.form("hourly_planner_form"):
+                        slot_selection = st.selectbox("Select Time Slot Block", hours_slots)
+                        act_type = st.radio("Activity Designation", ["Core Database Topic", "Break / Custom Task", "QA & KPI Parameters Training"])
+                        
+                        db_topics = db.get_topics()
+                        topic_options = {top['name']: top['id'] for top in db_topics}
+                        selected_topic_name = st.selectbox("Linked Core Database Topic (If applicable)", list(topic_options.keys()) if db_topics else ["No Topics Found"])
+                        
+                        custom_text = st.text_input("Custom Activity / Break Details Description")
+                        
+                        if st.form_submit_button("Commit Activity to Roster Grid"):
+                            sched_id = f"{target_date}_{slot_selection.replace(' ', '')}"
+                            payload = {
+                                "id": sched_id,
+                                "date": target_date,
+                                "time_slot": slot_selection,
+                                "activity_type": act_type,
+                                "topic_id": topic_options[selected_topic_name] if (act_type == "Core Database Topic" and db_topics) else None,
+                                "manual_activity": custom_text if act_type != "Core Database Topic" else selected_topic_name
+                            }
+                            db.upsert_induction_schedule(payload)
+                            st.success("Hourly slot mapped.")
+                            st.rerun()
+                
+                with c_sched2:
+                    st.markdown("#### Active Daily Schedule Grid Overview")
+                    day_schedule = db.get_induction_schedule_by_date(target_date)
+                    if day_schedule:
+                        sched_df = pd.DataFrame(day_schedule)[["time_slot", "activity_type", "manual_activity"]]
+                        st.table(sched_df.sort_values(by="time_slot"))
+                    else:
+                        st.caption("No hourly timelines assigned yet for this active target calendar block.")
+                
+                st.divider()
+                st.markdown("#### Dynamic Evaluation Engine & Manual Grading Portal")
+                all_trainees = db.get_trainees()
+                
+                if not all_trainees:
+                    st.info("Onboard trainees in L1 to authorize functional scoring profiles.")
+                else:
+                    with st.form("grading_engine_form"):
+                        g_trainee = st.selectbox("Select Trainee Evaluation Target Profile", [f"{t['name']} ({t['empid']})" for t in all_trainees])
+                        target_empid = g_trainee.split("(")[-1].replace(")", "").strip()
+                        
+                        col_scr1, col_scr2 = st.columns(2)
+                        quiz_score = col_scr1.number_input("Automated Daily Quiz Performance Metric Score", min_value=0, max_value=100, value=0)
+                        assignment_score = col_scr2.number_input("Manual Evaluation Assignment Grading Matrix Score", min_value=0, max_value=100, value=0)
+                        eval_notes = st.text_area("Trainer Observation Assessment Remarks & Notes Log")
+                        
+                        if st.form_submit_button("Securely Record Grade Matrices"):
+                            eval_id = f"{target_empid}_{target_date}"
+                            db.upsert_trainee_evaluation({
+                                "id": eval_id, "empid": target_empid, "date": target_date,
+                                "quiz_score": int(quiz_score), "assignment_score": int(assignment_score),
+                                "notes": eval_notes.strip()
+                            })
+                            st.success(f"Grades successfully calculated and securely logged down for {g_trainee}.")
+                            st.rerun()
+
+        # ---------------------------------------------------------
+        # LAYER 4: Training Outcome (Detailed Report Breakdown)
+        # ---------------------------------------------------------
+        with ind_l4:
+            st.subheader("Layer 4: Final Training Performance Report Dashboard Summary")
+            
+            raw_evals = db.get_all_evaluations()
+            if not raw_evals:
+                st.info("Insufficient system evaluation scoring records found to build final analysis modules yet.")
+            else:
+                eval_df = pd.DataFrame(raw_evals)
+                
+                # Dynamic calculations metrics mapping out scorecard profiles
+                eval_df['Total Score'] = (eval_df['quiz_score'] + eval_df['assignment_score']) / 2
+                summary_agg = eval_df.groupby(['empid', 'trainee_name', 'channel'])['Total Score'].mean().reset_index()
+                
+                col_c1, col_c2 = st.columns(2)
+                top_scorer = summary_agg.loc[summary_agg['Total Score'].idxmax()]
+                low_scorer = summary_agg.loc[summary_agg['Total Score'].idxmin()]
+                
+                col_c1.metric("🥇 Batch Top Performer Scorecard Profile", f"{top_scorer['trainee_name']}", f"{top_scorer['Total Score']:.1f}% Avg")
+                col_c2.metric("⚠️ Focus Required Profile Assistance Target", f"{low_scorer['trainee_name']}", f"{low_scorer['Total Score']:.1f}% Avg", delta_color="inverse")
+                
+                st.markdown("#### Comprehensive Analytical Scorecard Breakdown Table View")
+                st.dataframe(summary_agg, use_container_width=True, hide_index=True)
+                
+                # Excel Export Functionality Engine Structure
+                import io
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                    summary_agg.to_excel(writer, index=False, sheet_name="Induction Final Performance")
+                st.download_button(
+                    "📊 Export Final Onboarding Report to Excel Format",
+                    data=buf.getvalue(),
+                    file_name=f"induction_performance_report_{date.today().isoformat()}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
 
     # ==========================================
     # 3. REFRESHER TRAINING (PLACEHOLDER)
