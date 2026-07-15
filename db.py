@@ -245,3 +245,15 @@ def update_refresher_schedule_status(sched_id: str, status: str):
     conn.execute("UPDATE refresher_schedules SET status=? WHERE id=?", (status, sched_id))
     conn.commit()
     conn.close()
+# --- AGENT SELF-TRAINING SCOREBOARD ---
+def insert_self_training_score(empid: str, name: str, topic_id: str, topic_name: str, score: int, status: str):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO trainee_evaluations (id, empid, date, quiz_score, assignment_score, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            quiz_score=excluded.quiz_score,
+            notes=excluded.notes
+    """, (f"{empid}_{topic_id}", empid, datetime.now().strftime("%Y-%m-%d"), score, 100, f"Self-Training: {status}"))
+    conn.commit()
+    conn.close()
