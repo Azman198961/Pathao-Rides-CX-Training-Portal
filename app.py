@@ -86,7 +86,7 @@ DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 #     since agents don't need accounts — this just tags their record).
 # ---------------------------------------------------------------------------
 def check_admin_password(pw: str) -> bool:
-    real = st.secrets.get("admin_password", "changeme123")
+    real = st.secrets.get("admin_password", "CX123456")
     return pw == real
 
 
