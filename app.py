@@ -408,8 +408,105 @@ if is_admin_view:
     # ==========================================
     # 3. REFRESHER TRAINING (PLACEHOLDER)
     # ==========================================
+    # ==========================================
+    # 3. REFRESHER TRAINING (ADMIN VIEW)
+    # ==========================================
     with admin_tab3:
-        st.info("Step 3 Layer Integration: Incoming Request Board and Scheduling Wizard will load here.")
+        st.header("Refresher Training Management")
+        
+        ref_admin_tab1, ref_admin_tab2 = st.tabs([
+            "📥 Incoming Requests Board", 
+            "🧙 Scheduling Wizard & Active Sessions"
+        ])
+        
+        # ---------------------------------------------------------
+        # TAB 1: Incoming Request Board
+        # ---------------------------------------------------------
+        with ref_admin_tab1:
+            st.subheader("Agent Submitted Refresher Requests")
+            incoming_requests = db.get_refresher_requests()
+            
+            # Filter only pending requests
+            pending_reqs = [r for r in incoming_requests if r["status"] == "Pending"]
+            
+            if not pending_reqs:
+                st.info("No pending refresher requests at the moment.")
+            else:
+                req_df = pd.DataFrame(pending_reqs)[["name", "empid", "channel", "topic_name", "preferred_slot"]]
+                req_df.columns = ["Agent Name", "Emp ID", "Channel", "Requested Topic", "Preferred Slot"]
+                st.dataframe(req_df, use_container_width=True, hide_index=True)
+                
+                # Bulk Action / Select to Schedule
+                st.markdown("#### Action Board")
+                with st.form("bulk_schedule_form"):
+                    st.write("Group requests by topic to schedule a batch session:")
+                    
+                    # Group by unique pending topics
+                    pending_topics = list(set([r["topic_name"] for r in pending_reqs]))
+                    selected_group_topic = st.selectbox("Select Topic to Batch-Schedule", pending_topics)
+                    
+                    # Find agents requesting this topic
+                    target_agents = [r for r in pending_reqs if r["topic_name"] == selected_group_topic]
+                    agent_names = [f"{a['name']} ({a['empid']})" for a in target_agents]
+                    
+                    st.multiselect("Selected Agents for this Session", agent_names, default=agent_names)
+                    
+                    # Schedule Time Picker
+                    col_dt1, col_dt2 = st.columns(2)
+                    sched_date = col_dt1.date_input("Scheduled Date", value=date.today())
+                    sched_time = col_dt2.time_input("Scheduled Time")
+                    
+                    submit_schedule = st.form_submit_button("📅 Confirm & Schedule Batch Session")
+                    
+                    if submit_schedule:
+                        session_id = str(uuid.uuid4())
+                        topic_id = target_agents[0]["topic_id"]
+                        combined_time = f"{sched_date.isoformat()} {sched_time.strftime('%I:%M %p')}"
+                        agent_ids_list = [a['empid'] for a in target_agents]
+                        
+                        # Save active schedule
+                        db.insert_refresher_schedule({
+                            "id": session_id,
+                            "topic_id": topic_id,
+                            "scheduled_time": combined_time,
+                            "agent_ids": json.dumps(agent_ids_list),
+                            "status": "Active"
+                        })
+                        
+                        # Update individual request status to 'Scheduled'
+                        for a in target_agents:
+                            db.update_refresher_request_status(a["id"], "Scheduled")
+                            
+                        st.success(f"Successfully scheduled batch refresher session for '{selected_group_topic}' at {combined_time}!")
+                        st.rerun()
+
+        # ---------------------------------------------------------
+        # TAB 2: Scheduling Wizard & Active Sessions
+        # ---------------------------------------------------------
+        with ref_admin_tab2:
+            st.subheader("Currently Scheduled Active Sessions")
+            active_sessions = db.get_active_refresher_schedules()
+            
+            if not active_sessions:
+                st.info("No active scheduled sessions found.")
+            else:
+                for session in active_sessions:
+                    with st.container(border=True):
+                        c_s1, c_s2 = st.columns([3, 1])
+                        
+                        # Parse agent IDs from JSON
+                        session_agents = json.loads(session["agent_ids"])
+                        
+                        c_s1.markdown(f"### 📚 Topic: {session['topic_name']}")
+                        c_s1.markdown(f"**⏰ Scheduled Time:** {session['scheduled_time']}")
+                        c_s1.write(f"**👥 Confirmed Agents (EMP IDs):** {', '.join(session_agents)}")
+                        
+                        # Trigger session completion
+                        with c_s2:
+                            if st.button("✅ Mark as Completed", key=f"complete_session_{session['id']}"):
+                                db.update_refresher_schedule_status(session["id"], "Completed")
+                                st.success("Session completed and closed.")
+                                st.rerun()
 
 else:
     # ==========================================
