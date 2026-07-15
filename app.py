@@ -510,7 +510,178 @@ if is_admin_view:
 
 else:
     # ==========================================
-    # AGENT VIEW (PLACEHOLDER)
+    # AGENT WORKSPACE PORTAL (COMPLETE VIEW)
     # ==========================================
-    st.markdown("### Agent Workspace Portal")
-    st.info("Step 4 Layer Integration: Self-paced training viewers, interactive dynamic quiz completion, and refresher request portals will load here.")
+    st.header("Agent Self-Service & Training Hub")
+    
+    agent_tab1, agent_tab2 = st.tabs([
+        "📖 Self-Paced Learning & Quizzes", 
+        "🔁 Request Refresher Session"
+    ])
+    
+    # ---------------------------------------------------------
+    # TAB 1: Self-Paced Learning (Self-Training)
+    # ---------------------------------------------------------
+    with agent_tab1:
+        st.subheader("Interactive Knowledge Hub")
+        
+        # User Authentication Form
+        if "agent_authenticated" not in st.session_state:
+            st.session_state.agent_authenticated = False
+            
+        if not st.session_state.agent_authenticated:
+            with st.form("agent_login_form"):
+                st.markdown("#### Enter Your Details to Access Portal")
+                ag_name = st.text_input("Full Name *")
+                ag_id = st.text_input("Employee ID *")
+                ag_chan = st.selectbox("Your Operating Channel", ["Voice", "Chat", "Email"])
+                
+                if st.form_submit_button("Access Training Modules"):
+                    if not ag_name or not ag_id:
+                        st.error("Name and Employee ID are required to proceed.")
+                    else:
+                        st.session_state.agent_name = ag_name.strip()
+                        st.session_state.agent_empid = ag_id.strip()
+                        st.session_state.agent_channel = ag_chan
+                        st.session_state.agent_authenticated = True
+                        st.rerun()
+        else:
+            st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid}) — Channel: {st.session_state.agent_channel}")
+            if st.button("Log Out / Change Profile"):
+                st.session_state.agent_authenticated = False
+                st.rerun()
+                
+            st.divider()
+            
+            # Fetch All Central Topics
+            all_topics = db.get_topics()
+            if not all_topics:
+                st.info("No training modules found in the database. Please check back later.")
+            else:
+                topic_options = {t["name"]: t for t in all_topics}
+                selected_topic_name = st.selectbox("Select Study Topic *", list(topic_options.keys()))
+                selected_topic = topic_options[selected_topic_name]
+                
+                # Dynamic Tabs for Learning Content
+                st.markdown(f"### Study Material: **{selected_topic['name']}**")
+                st.caption(f"⏱️ Estimated Study Time: {selected_topic['duration']}")
+                
+                study_tabs = st.tabs([
+                    "📖 Core Knowledge", 
+                    "🛠️ Tools & Systems", 
+                    "🔀 Step-by-Step Process", 
+                    "💬 Response Templates"
+                ])
+                
+                with study_tabs[0]:
+                    st.markdown("#### Service Knowledge Guidelines")
+                    st.write(selected_topic["service_knowledge"] or "No guidelines uploaded for this section.")
+                with study_tabs[1]:
+                    st.markdown("#### Required Systems & Checkpoints")
+                    st.write(selected_topic["tools_introduction"] or "No tools detailed for this section.")
+                    if selected_topic["tools_checkpoint"]:
+                        st.markdown("**Action Checkpoints:**")
+                        for point in selected_topic["tools_checkpoint"].split("\n"):
+                            st.checkbox(point, key=f"cp_{selected_topic['id']}_{point[:15]}")
+                with study_tabs[2]:
+                    st.markdown("#### Workflow Resolution Path")
+                    st.info(selected_topic["process_flow"] or "No process workflows mapped.")
+                with study_tabs[3]:
+                    st.markdown("#### Communication Scripts & Templates")
+                    st.write(selected_topic["communication_scripts"] or "No communication scripts provided.")
+                
+                st.divider()
+                
+                # Dynamic Quiz Creator Engine
+                st.markdown("### 📝 Dynamic Evaluation Check")
+                try:
+                    quiz_data = json.loads(selected_topic["quiz_questions"])
+                except Exception:
+                    quiz_data = []
+                    
+                if not quiz_data or len(quiz_data) == 0:
+                    st.warning("No assessment quiz is linked to this topic yet.")
+                else:
+                    st.write("Complete the assessment below to earn your 'Completed' badge:")
+                    
+                    user_answers = {}
+                    for idx, question in enumerate(quiz_data):
+                        st.markdown(f"**Q{idx+1}. {question['question']}**")
+                        user_answers[idx] = st.radio(
+                            "Select Answer:", 
+                            question["options"], 
+                            key=f"q_{selected_topic['id']}_{idx}"
+                        )
+                        st.write("")
+                    
+                    if st.button("Submit Assessment & Finish Topic"):
+                        # Calculate Score
+                        correct_count = 0
+                        for idx, question in enumerate(quiz_data):
+                            if user_answers[idx] == question["answer"]:
+                                correct_count += 1
+                                
+                        score_percentage = int((correct_count / len(quiz_data)) * 100)
+                        passing_score = selected_topic["quiz_passing_mark"]
+                        
+                        if score_percentage >= passing_score:
+                            st.balloons()
+                            st.success(f"🎉 Passed! Your Score: {score_percentage}% (Required: {passing_score}%)")
+                            db.insert_self_training_score(
+                                empid=st.session_state.agent_empid,
+                                name=st.session_state.agent_name,
+                                topic_id=selected_topic["id"],
+                                topic_name=selected_topic["name"],
+                                score=score_percentage,
+                                status="Passed"
+                            )
+                        else:
+                            st.error(f"❌ Failed. Your Score: {score_percentage}% (Required: {passing_score}%). Please try again.")
+
+    # ---------------------------------------------------------
+    # TAB 2: Refresher Training Request
+    # ---------------------------------------------------------
+    with agent_tab2:
+        st.subheader("Request for Refresher Assistance")
+        st.write("Can't resolve specific customer issues? Request a classroom refresher with a trainer.")
+        
+        if "agent_authenticated" not in st.session_state or not st.session_state.agent_authenticated:
+            st.warning("Please sign-in inside the 'Self-Paced Learning' tab to request training.")
+        else:
+            with st.form("refresher_request_form", clear_on_submit=True):
+                st.markdown("#### Refresher Details")
+                st.text_input("Your Name", value=st.session_state.agent_name, disabled=True)
+                st.text_input("Your Employee ID", value=st.session_state.agent_empid, disabled=True)
+                
+                # Fetch available topics from database
+                all_topics = db.get_topics()
+                topic_options = {t["name"]: t["id"] for t in all_topics} if all_topics else {}
+                
+                selected_topic_name = st.selectbox("Select Topic You Need Help With *", list(topic_options.keys()) if topic_options else ["No Topics Available"])
+                
+                # Available Time Slots (Date & Time input helper)
+                req_date = st.date_input("Preferred Date", value=date.today())
+                req_time = st.selectbox("Preferred Hour Slot", [
+                    "11:00 AM - 01:00 PM",
+                    "02:00 PM - 04:00 PM",
+                    "04:00 PM - 06:00 PM",
+                    "06:00 PM - 08:00 PM"
+                ])
+                
+                submit_req = st.form_submit_button("Submit Request to Training Queue")
+                
+                if submit_req:
+                    if not topic_options:
+                        st.error("Cannot submit. No topics exist in the Database.")
+                    else:
+                        req_payload = {
+                            "id": str(uuid.uuid4()),
+                            "empid": st.session_state.agent_empid,
+                            "name": st.session_state.agent_name,
+                            "channel": st.session_state.agent_channel,
+                            "topic_id": topic_options[selected_topic_name],
+                            "preferred_slot": f"{req_date.isoformat()} ({req_time})",
+                            "status": "Pending"
+                        }
+                        db.insert_refresher_request(req_payload)
+                        st.success("Your request has been successfully queued. Trainers will review and schedule a session soon.")
