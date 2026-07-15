@@ -192,3 +192,56 @@ def get_all_evaluations():
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+    # --- REFRESHER REQUESTS HELPER ---
+def insert_refresher_request(req: dict):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO refresher_requests (id, empid, name, channel, topic_id, preferred_slot, status)
+        VALUES (:id, :empid, :name, :channel, :topic_id, :preferred_slot, :status)
+    """, req)
+    conn.commit()
+    conn.close()
+
+def get_refresher_requests():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT r.*, t.name as topic_name 
+        FROM refresher_requests r
+        LEFT JOIN topics t ON r.topic_id = t.id
+        ORDER BY r.preferred_slot ASC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def update_refresher_request_status(req_id: str, status: str):
+    conn = get_conn()
+    conn.execute("UPDATE refresher_requests SET status=? WHERE id=?", (status, req_id))
+    conn.commit()
+    conn.close()
+
+# --- REFRESHER SCHEDULING HELPER ---
+def insert_refresher_schedule(sched: dict):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO refresher_schedules (id, topic_id, scheduled_time, agent_ids, status)
+        VALUES (:id, :topic_id, :scheduled_time, :agent_ids, :status)
+    """, sched)
+    conn.commit()
+    conn.close()
+
+def get_active_refresher_schedules():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT s.*, t.name as topic_name 
+        FROM refresher_schedules s
+        LEFT JOIN topics t ON s.topic_id = t.id
+        WHERE s.status = 'Active'
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def update_refresher_schedule_status(sched_id: str, status: str):
+    conn = get_conn()
+    conn.execute("UPDATE refresher_schedules SET status=? WHERE id=?", (status, sched_id))
+    conn.commit()
+    conn.close()
