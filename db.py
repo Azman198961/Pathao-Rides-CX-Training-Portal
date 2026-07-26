@@ -2,6 +2,7 @@
 import sqlite3
 import os
 import json
+from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "training_portal.db")
 
@@ -14,7 +15,7 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     
-    # 1. Core Central Database: Topics
+    # 1. Core Central Database: Topics (Added File Attachment Support)
     c.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             id TEXT PRIMARY KEY,
@@ -27,7 +28,10 @@ def init_db():
             process_flow TEXT,
             communication_scripts TEXT,
             quiz_passing_mark INTEGER DEFAULT 0,
-            quiz_questions TEXT -- JSON string storing array of MCQs
+            quiz_questions TEXT, -- JSON string storing array of MCQs
+            file_name TEXT,
+            file_type TEXT,
+            file_data BLOB
         )
     """)
     
@@ -103,15 +107,20 @@ def upsert_topic(topic: dict):
     conn = get_conn()
     conn.execute("""
         INSERT INTO topics (id, name, duration, trainer_name, service_knowledge, tools_introduction, 
-                            tools_checkpoint, process_flow, communication_scripts, quiz_passing_mark, quiz_questions)
+                            tools_checkpoint, process_flow, communication_scripts, quiz_passing_mark, quiz_questions,
+                            file_name, file_type, file_data)
         VALUES (:id, :name, :duration, :trainer_name, :service_knowledge, :tools_introduction, 
-                :tools_checkpoint, :process_flow, :communication_scripts, :quiz_passing_mark, :quiz_questions)
+                :tools_checkpoint, :process_flow, :communication_scripts, :quiz_passing_mark, :quiz_questions,
+                :file_name, :file_type, :file_data)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name, duration=excluded.duration, trainer_name=excluded.trainer_name,
             service_knowledge=excluded.service_knowledge, tools_introduction=excluded.tools_introduction,
             tools_checkpoint=excluded.tools_checkpoint, process_flow=excluded.process_flow,
             communication_scripts=excluded.communication_scripts, quiz_passing_mark=excluded.quiz_passing_mark,
-            quiz_questions=excluded.quiz_questions
+            quiz_questions=excluded.quiz_questions,
+            file_name=COALESCE(excluded.file_name, topics.file_name),
+            file_type=COALESCE(excluded.file_type, topics.file_type),
+            file_data=COALESCE(excluded.file_data, topics.file_data)
     """, topic)
     conn.commit()
     conn.close()
@@ -147,7 +156,8 @@ def get_trainees():
     rows = conn.execute("SELECT * FROM trainees").fetchall()
     conn.close()
     return [dict(r) for r in rows]
-    # --- INDUCTION SCHEDULE & ROSTER HELPER ---
+
+# --- INDUCTION SCHEDULE & ROSTER HELPER ---
 def upsert_induction_schedule(sched: dict):
     conn = get_conn()
     conn.execute("""
@@ -192,7 +202,8 @@ def get_all_evaluations():
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
-    # --- REFRESHER REQUESTS HELPER ---
+
+# --- REFRESHER REQUESTS HELPER ---
 def insert_refresher_request(req: dict):
     conn = get_conn()
     conn.execute("""
@@ -245,6 +256,7 @@ def update_refresher_schedule_status(sched_id: str, status: str):
     conn.execute("UPDATE refresher_schedules SET status=? WHERE id=?", (status, sched_id))
     conn.commit()
     conn.close()
+
 # --- AGENT SELF-TRAINING SCOREBOARD ---
 def insert_self_training_score(empid: str, name: str, topic_id: str, topic_name: str, score: int, status: str):
     conn = get_conn()
