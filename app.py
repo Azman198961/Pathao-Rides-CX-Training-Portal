@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import uuid
+import base64
+import io
 from datetime import datetime, date
 
 import db
@@ -98,7 +100,11 @@ if is_admin_view:
                 t_duration = c2.text_input("Duration * (e.g., 45 mins, 1.5 hours)")
                 t_trainer = c3.text_input("Assigned Trainer Name")
                 
-                st.markdown("#### Category Details & Content Tabs")
+                st.markdown("#### 📁 Upload Training File / Document (PDF, Image, Docx)")
+                uploaded_doc = st.file_uploader("Upload PDF / Document for in-portal view", 
+                                                type=["pdf", "docx", "pptx", "png", "jpg", "jpeg"])
+                
+                st.markdown("#### Category Details & Content Tabs (Optional if File Uploaded)")
                 det_tabs = st.tabs([
                     "📖 Service Knowledge", "🛠️ Tools Intro", 
                     "✅ Tools Checkpoint", "🔀 Process Flow", 
@@ -106,21 +112,20 @@ if is_admin_view:
                 ])
                 
                 with det_tabs[0]:
-                    sk_content = st.text_area("Core Service Policies & Guidelines", height=150)
+                    sk_content = st.text_area("Core Service Policies & Guidelines", height=120)
                 with det_tabs[1]:
-                    ti_content = st.text_area("Required Tools Breakdown (e.g., Zendesk, Admin Panel)", height=150)
+                    ti_content = st.text_area("Required Tools Breakdown (e.g., Zendesk, Admin Panel)", height=120)
                 with det_tabs[2]:
-                    tc_content = st.text_area("Checklist to verify agent technical execution (One per line)", height=150)
+                    tc_content = st.text_area("Checklist to verify agent technical execution (One per line)", height=120)
                 with det_tabs[3]:
-                    pf_content = st.text_area("Step-by-step resolution paths and systemic workflows", height=150)
+                    pf_content = st.text_area("Step-by-step resolution paths and systemic workflows", height=120)
                 with det_tabs[4]:
-                    cs_content = st.text_area("Response templates and Tone of Voice parameters", height=150)
+                    cs_content = st.text_area("Response templates and Tone of Voice parameters", height=120)
                     
                 with det_tabs[5]:
                     c_q1, c_q2 = st.columns([1, 3])
                     passing_mark = c_q1.number_input("Passing Score (%)", min_value=0, max_value=100, value=80)
                     st.caption("Define basic multiple-choice questions structural JSON format below:")
-                    # Default template structure for MCQs
                     quiz_json_str = st.text_area(
                         "MCQ Setup Array (JSON Format)", 
                         value=json.dumps([
@@ -130,7 +135,7 @@ if is_admin_view:
                                 "answer": "Option A"
                             }
                         ], indent=4), 
-                        height=150
+                        height=120
                     )
                 
                 submit_topic = st.form_submit_button("💾 Save Topic to Database")
@@ -140,7 +145,6 @@ if is_admin_view:
                         st.error("Topic Name and Duration are required fields.")
                     else:
                         try:
-                            # Verify valid JSON syntax
                             json.loads(quiz_json_str)
                             
                             topic_payload = {
@@ -154,13 +158,16 @@ if is_admin_view:
                                 "process_flow": pf_content.strip(),
                                 "communication_scripts": cs_content.strip(),
                                 "quiz_passing_mark": int(passing_mark),
-                                "quiz_questions": quiz_json_str.strip()
+                                "quiz_questions": quiz_json_str.strip(),
+                                "file_name": uploaded_doc.name if uploaded_doc else None,
+                                "file_type": uploaded_doc.type if uploaded_doc else None,
+                                "file_data": uploaded_doc.getvalue() if uploaded_doc else None
                             }
                             db.upsert_topic(topic_payload)
-                            st.success(f"Topic '{t_name}' securely committed to the Core Database.")
+                            st.success(f"Topic '{t_name}' securely saved.")
                             st.rerun()
                         except json.JSONDecodeError:
-                            st.error("Invalid Quiz Setup Array format. Ensure it strictly matches JSON arrays.")
+                            st.error("Invalid Quiz Setup Array format.")
 
         # Display Available Core Topics
         st.subheader("Current Database Records")
@@ -170,25 +177,17 @@ if is_admin_view:
         else:
             for top in current_topics:
                 with st.container(border=True):
-                    col_t1, col_t2, col_t3 = st.columns([3, 1, 1])
+                    col_t1, col_t2 = st.columns([4, 1])
                     col_t1.markdown(f"### {top['name']}")
-                    col_t1.caption(f"⏱️ Duration: {top['duration']} | 👤 Trainer: {top['trainer_name'] or 'Unassigned'}")
+                    col_t1.caption(f"⏱️ Duration: {top['duration']} | 👤 Trainer: {top['trainer_name'] or 'Unassigned'} | 📁 Attachment: {top['file_name'] or 'None'}")
                     
                     with col_t2:
                         if st.button("🗑️ Delete Topic", key=f"del_{top['id']}"):
                             db.delete_topic(top['id'])
                             st.warning("Topic removed.")
                             st.rerun()
-                            
-                    with st.expander("📄 View Linked Modules & Materials"):
-                        st.markdown(f"**Service Knowledge:** {top['service_knowledge']}")
-                        st.markdown(f"**Process Flows:** {top['process_flow']}")
-                        st.markdown(f"**Passing Requirement:** {top['quiz_passing_mark']}%")
 
     # ==========================================
-    # 2. INDUCTION TRAINING (PLACEHOLDER)
-    # ==========================================
-   # ==========================================
     # 2. INDUCTION TRAINING (LAYERS 1 - 4)
     # ==========================================
     with admin_tab2:
@@ -201,9 +200,7 @@ if is_admin_view:
             "📊 L4: Performance Report"
         ])
         
-        # ---------------------------------------------------------
         # LAYER 1: Trainee Information Onboarding
-        # ---------------------------------------------------------
         with ind_l1:
             st.subheader("Layer 1: Onboard New Joiners")
             col_b1, col_b2 = st.columns([1, 1])
@@ -256,9 +253,7 @@ if is_admin_view:
             else:
                 st.caption("No trainees currently exist in the database roster.")
 
-        # ---------------------------------------------------------
         # LAYER 2: Training Duration (Timeline Grid)
-        # ---------------------------------------------------------
         with ind_l2:
             st.subheader("Layer 2: Timeline Setup")
             col_time1, col_time2 = st.columns([1, 2])
@@ -266,13 +261,12 @@ if is_admin_view:
             with col_time1:
                 start_range = st.date_input("Training Batch Start Date", key="ind_start")
                 end_range = st.date_input("Training Batch End Date", key="ind_end")
-                
+            
             with col_time2:
                 if start_range <= end_range:
                     delta_days = (end_range - start_range).days + 1
                     st.info(f"Interactive timeline generated dynamically: **{delta_days} Training Days** configured.")
                     
-                    # Interactive Calendar Grid Generator
                     st.markdown("#### Batch Timeline Grid Selector")
                     grid_cols = st.columns(min(7, delta_days))
                     for day_idx in range(delta_days):
@@ -287,9 +281,7 @@ if is_admin_view:
                 else:
                     st.error("Error: End date must fall ahead or equal to start date timeline parameters.")
 
-        # ---------------------------------------------------------
         # LAYER 3: Daily Calendar Schedule & Evaluation Engine
-        # ---------------------------------------------------------
         with ind_l3:
             target_date = st.session_state.get("active_induction_date", None)
             if not target_date:
@@ -363,12 +355,10 @@ if is_admin_view:
                                 "quiz_score": int(quiz_score), "assignment_score": int(assignment_score),
                                 "notes": eval_notes.strip()
                             })
-                            st.success(f"Grades successfully calculated and securely logged down for {g_trainee}.")
+                            st.success(f"Grades successfully calculated and logged for {g_trainee}.")
                             st.rerun()
 
-        # ---------------------------------------------------------
         # LAYER 4: Training Outcome (Detailed Report Breakdown)
-        # ---------------------------------------------------------
         with ind_l4:
             st.subheader("Layer 4: Final Training Performance Report Dashboard Summary")
             
@@ -392,8 +382,6 @@ if is_admin_view:
                 st.markdown("#### Comprehensive Analytical Scorecard Breakdown Table View")
                 st.dataframe(summary_agg, use_container_width=True, hide_index=True)
                 
-                # Excel Export Functionality Engine Structure
-                import io
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine="openpyxl") as writer:
                     summary_agg.to_excel(writer, index=False, sheet_name="Induction Final Performance")
@@ -406,9 +394,6 @@ if is_admin_view:
                 )
 
     # ==========================================
-    # 3. REFRESHER TRAINING (PLACEHOLDER)
-    # ==========================================
-    # ==========================================
     # 3. REFRESHER TRAINING (ADMIN VIEW)
     # ==========================================
     with admin_tab3:
@@ -419,14 +404,11 @@ if is_admin_view:
             "🧙 Scheduling Wizard & Active Sessions"
         ])
         
-        # ---------------------------------------------------------
         # TAB 1: Incoming Request Board
-        # ---------------------------------------------------------
         with ref_admin_tab1:
             st.subheader("Agent Submitted Refresher Requests")
             incoming_requests = db.get_refresher_requests()
             
-            # Filter only pending requests
             pending_reqs = [r for r in incoming_requests if r["status"] == "Pending"]
             
             if not pending_reqs:
@@ -436,22 +418,18 @@ if is_admin_view:
                 req_df.columns = ["Agent Name", "Emp ID", "Channel", "Requested Topic", "Preferred Slot"]
                 st.dataframe(req_df, use_container_width=True, hide_index=True)
                 
-                # Bulk Action / Select to Schedule
                 st.markdown("#### Action Board")
                 with st.form("bulk_schedule_form"):
                     st.write("Group requests by topic to schedule a batch session:")
                     
-                    # Group by unique pending topics
                     pending_topics = list(set([r["topic_name"] for r in pending_reqs]))
                     selected_group_topic = st.selectbox("Select Topic to Batch-Schedule", pending_topics)
                     
-                    # Find agents requesting this topic
                     target_agents = [r for r in pending_reqs if r["topic_name"] == selected_group_topic]
                     agent_names = [f"{a['name']} ({a['empid']})" for a in target_agents]
                     
                     st.multiselect("Selected Agents for this Session", agent_names, default=agent_names)
                     
-                    # Schedule Time Picker
                     col_dt1, col_dt2 = st.columns(2)
                     sched_date = col_dt1.date_input("Scheduled Date", value=date.today())
                     sched_time = col_dt2.time_input("Scheduled Time")
@@ -464,7 +442,6 @@ if is_admin_view:
                         combined_time = f"{sched_date.isoformat()} {sched_time.strftime('%I:%M %p')}"
                         agent_ids_list = [a['empid'] for a in target_agents]
                         
-                        # Save active schedule
                         db.insert_refresher_schedule({
                             "id": session_id,
                             "topic_id": topic_id,
@@ -473,16 +450,13 @@ if is_admin_view:
                             "status": "Active"
                         })
                         
-                        # Update individual request status to 'Scheduled'
                         for a in target_agents:
                             db.update_refresher_request_status(a["id"], "Scheduled")
                             
-                        st.success(f"Successfully scheduled batch refresher session for '{selected_group_topic}' at {combined_time}!")
+                        st.success(f"Successfully scheduled session for '{selected_group_topic}' at {combined_time}!")
                         st.rerun()
 
-        # ---------------------------------------------------------
         # TAB 2: Scheduling Wizard & Active Sessions
-        # ---------------------------------------------------------
         with ref_admin_tab2:
             st.subheader("Currently Scheduled Active Sessions")
             active_sessions = db.get_active_refresher_schedules()
@@ -494,14 +468,12 @@ if is_admin_view:
                     with st.container(border=True):
                         c_s1, c_s2 = st.columns([3, 1])
                         
-                        # Parse agent IDs from JSON
                         session_agents = json.loads(session["agent_ids"])
                         
                         c_s1.markdown(f"### 📚 Topic: {session['topic_name']}")
                         c_s1.markdown(f"**⏰ Scheduled Time:** {session['scheduled_time']}")
                         c_s1.write(f"**👥 Confirmed Agents (EMP IDs):** {', '.join(session_agents)}")
                         
-                        # Trigger session completion
                         with c_s2:
                             if st.button("✅ Mark as Completed", key=f"complete_session_{session['id']}"):
                                 db.update_refresher_schedule_status(session["id"], "Completed")
@@ -519,13 +491,10 @@ else:
         "🔁 Request Refresher Session"
     ])
     
-    # ---------------------------------------------------------
     # TAB 1: Self-Paced Learning (Self-Training)
-    # ---------------------------------------------------------
     with agent_tab1:
         st.subheader("Interactive Knowledge Hub")
         
-        # User Authentication Form
         if "agent_authenticated" not in st.session_state:
             st.session_state.agent_authenticated = False
             
@@ -553,7 +522,6 @@ else:
                 
             st.divider()
             
-            # Fetch All Central Topics
             all_topics = db.get_topics()
             if not all_topics:
                 st.info("No training modules found in the database. Please check back later.")
@@ -562,10 +530,29 @@ else:
                 selected_topic_name = st.selectbox("Select Study Topic *", list(topic_options.keys()))
                 selected_topic = topic_options[selected_topic_name]
                 
-                # Dynamic Tabs for Learning Content
                 st.markdown(f"### Study Material: **{selected_topic['name']}**")
                 st.caption(f"⏱️ Estimated Study Time: {selected_topic['duration']}")
                 
+                # IN-PORTAL EMBEDDED DOCUMENT VIEWER
+                if selected_topic.get("file_name") and selected_topic.get("file_data"):
+                    st.markdown(f"#### 📄 Training Document View: `{selected_topic['file_name']}`")
+                    
+                    file_bytes = selected_topic["file_data"]
+                    file_name = selected_topic["file_name"].lower()
+                    
+                    # Direct PDF Viewing via iframe
+                    if file_name.endswith(".pdf"):
+                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
+                    # Image Preview
+                    elif file_name.endswith((".png", ".jpg", ".jpeg")):
+                        st.image(file_bytes, use_column_width=True)
+                    else:
+                        st.info(f"Attached File: **{selected_topic['file_name']}** (Direct preview is best optimized for PDF/Images).")
+                    st.divider()
+                
+                # Text Tabs (Shown if present)
                 study_tabs = st.tabs([
                     "📖 Core Knowledge", 
                     "🛠️ Tools & Systems", 
@@ -575,24 +562,24 @@ else:
                 
                 with study_tabs[0]:
                     st.markdown("#### Service Knowledge Guidelines")
-                    st.write(selected_topic["service_knowledge"] or "No guidelines uploaded for this section.")
+                    st.write(selected_topic["service_knowledge"] or "Detailed in attached document above.")
                 with study_tabs[1]:
                     st.markdown("#### Required Systems & Checkpoints")
-                    st.write(selected_topic["tools_introduction"] or "No tools detailed for this section.")
+                    st.write(selected_topic["tools_introduction"] or "Detailed in attached document above.")
                     if selected_topic["tools_checkpoint"]:
                         st.markdown("**Action Checkpoints:**")
                         for point in selected_topic["tools_checkpoint"].split("\n"):
                             st.checkbox(point, key=f"cp_{selected_topic['id']}_{point[:15]}")
                 with study_tabs[2]:
                     st.markdown("#### Workflow Resolution Path")
-                    st.info(selected_topic["process_flow"] or "No process workflows mapped.")
+                    st.info(selected_topic["process_flow"] or "Detailed in attached document above.")
                 with study_tabs[3]:
                     st.markdown("#### Communication Scripts & Templates")
-                    st.write(selected_topic["communication_scripts"] or "No communication scripts provided.")
+                    st.write(selected_topic["communication_scripts"] or "Detailed in attached document above.")
                 
                 st.divider()
                 
-                # Dynamic Quiz Creator Engine
+                # Dynamic Quiz Engine
                 st.markdown("### 📝 Dynamic Evaluation Check")
                 try:
                     quiz_data = json.loads(selected_topic["quiz_questions"])
@@ -615,7 +602,6 @@ else:
                         st.write("")
                     
                     if st.button("Submit Assessment & Finish Topic"):
-                        # Calculate Score
                         correct_count = 0
                         for idx, question in enumerate(quiz_data):
                             if user_answers[idx] == question["answer"]:
@@ -638,9 +624,7 @@ else:
                         else:
                             st.error(f"❌ Failed. Your Score: {score_percentage}% (Required: {passing_score}%). Please try again.")
 
-    # ---------------------------------------------------------
     # TAB 2: Refresher Training Request
-    # ---------------------------------------------------------
     with agent_tab2:
         st.subheader("Request for Refresher Assistance")
         st.write("Can't resolve specific customer issues? Request a classroom refresher with a trainer.")
@@ -653,13 +637,11 @@ else:
                 st.text_input("Your Name", value=st.session_state.agent_name, disabled=True)
                 st.text_input("Your Employee ID", value=st.session_state.agent_empid, disabled=True)
                 
-                # Fetch available topics from database
                 all_topics = db.get_topics()
                 topic_options = {t["name"]: t["id"] for t in all_topics} if all_topics else {}
                 
                 selected_topic_name = st.selectbox("Select Topic You Need Help With *", list(topic_options.keys()) if topic_options else ["No Topics Available"])
                 
-                # Available Time Slots (Date & Time input helper)
                 req_date = st.date_input("Preferred Date", value=date.today())
                 req_time = st.selectbox("Preferred Hour Slot", [
                     "11:00 AM - 01:00 PM",
