@@ -1,4 +1,4 @@
-# db.py — Extended SQLite persistence layer for Pathao CX Training Portal
+# db.py — Cleaned Database Layer for Document & 5-MCQ Quiz Architecture
 import sqlite3
 import os
 import json
@@ -15,38 +15,22 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     
-    # 1. Core Central Database: Topics
+    # 1. Simplified Core Topics Database Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             duration TEXT,
             trainer_name TEXT,
-            service_knowledge TEXT,
-            tools_introduction TEXT,
-            tools_checkpoint TEXT,
-            process_flow TEXT,
-            communication_scripts TEXT,
-            quiz_passing_mark INTEGER DEFAULT 0,
+            quiz_passing_mark INTEGER DEFAULT 80,
             quiz_questions TEXT,
             file_name TEXT,
             file_type TEXT,
             file_data BLOB
         )
     """)
-    
-    # Auto-migration safety check for missing columns
-    cursor = c.execute("PRAGMA table_info(topics)")
-    columns = [column[1] for column in cursor.fetchall()]
-    
-    if "file_name" not in columns:
-        c.execute("ALTER TABLE topics ADD COLUMN file_name TEXT")
-    if "file_type" not in columns:
-        c.execute("ALTER TABLE topics ADD COLUMN file_type TEXT")
-    if "file_data" not in columns:
-        c.execute("ALTER TABLE topics ADD COLUMN file_data BLOB")
 
-    # 2. Induction Training: Trainee Onboarding
+    # 2. Trainee Onboarding
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainees (
             empid TEXT PRIMARY KEY,
@@ -58,7 +42,7 @@ def init_db():
         )
     """)
     
-    # 3. Induction Training: Daily Roster Grid & Schedule
+    # 3. Induction Schedule
     c.execute("""
         CREATE TABLE IF NOT EXISTS induction_schedule (
             id TEXT PRIMARY KEY,
@@ -71,7 +55,7 @@ def init_db():
         )
     """)
     
-    # 4. Evaluation Engine: Trainee Grades
+    # 4. Trainee Evaluations
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainee_evaluations (
             id TEXT PRIMARY KEY,
@@ -84,7 +68,7 @@ def init_db():
         )
     """)
 
-    # 5. Refresher Training: Incoming Requests Board
+    # 5. Refresher Requests
     c.execute("""
         CREATE TABLE IF NOT EXISTS refresher_requests (
             id TEXT PRIMARY KEY,
@@ -98,7 +82,7 @@ def init_db():
         )
     """)
     
-    # 6. Refresher Training: Scheduled Wizard Sessions
+    # 6. Refresher Schedules
     c.execute("""
         CREATE TABLE IF NOT EXISTS refresher_schedules (
             id TEXT PRIMARY KEY,
@@ -113,21 +97,17 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- HELPER FUNCTIONS FOR TOPICS ---
+# --- TOPICS CRUD ---
 def upsert_topic(topic: dict):
     conn = get_conn()
     conn.execute("""
-        INSERT INTO topics (id, name, duration, trainer_name, service_knowledge, tools_introduction, 
-                            tools_checkpoint, process_flow, communication_scripts, quiz_passing_mark, quiz_questions,
-                            file_name, file_type, file_data)
-        VALUES (:id, :name, :duration, :trainer_name, :service_knowledge, :tools_introduction, 
-                :tools_checkpoint, :process_flow, :communication_scripts, :quiz_passing_mark, :quiz_questions,
-                :file_name, :file_type, :file_data)
+        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, file_name, file_type, file_data)
+        VALUES (:id, :name, :duration, :trainer_name, :quiz_passing_mark, :quiz_questions, :file_name, :file_type, :file_data)
         ON CONFLICT(id) DO UPDATE SET
-            name=excluded.name, duration=excluded.duration, trainer_name=excluded.trainer_name,
-            service_knowledge=excluded.service_knowledge, tools_introduction=excluded.tools_introduction,
-            tools_checkpoint=excluded.tools_checkpoint, process_flow=excluded.process_flow,
-            communication_scripts=excluded.communication_scripts, quiz_passing_mark=excluded.quiz_passing_mark,
+            name=excluded.name,
+            duration=excluded.duration,
+            trainer_name=excluded.trainer_name,
+            quiz_passing_mark=excluded.quiz_passing_mark,
             quiz_questions=excluded.quiz_questions,
             file_name=COALESCE(excluded.file_name, topics.file_name),
             file_type=COALESCE(excluded.file_type, topics.file_type),
@@ -148,7 +128,7 @@ def delete_topic(topic_id: str):
     conn.commit()
     conn.close()
 
-# --- HELPER FUNCTIONS FOR TRAINEES ---
+# --- TRAINEES ---
 def insert_trainees(trainee_list: list):
     conn = get_conn()
     for t in trainee_list:
@@ -168,7 +148,7 @@ def get_trainees():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- INDUCTION SCHEDULE & ROSTER HELPER ---
+# --- INDUCTION SCHEDULE ---
 def upsert_induction_schedule(sched: dict):
     conn = get_conn()
     conn.execute("""
@@ -192,7 +172,7 @@ def get_induction_schedule_by_date(target_date: str):
     conn.close()
     return [dict(r) for r in rows]
 
-# --- EVALUATION ENGINE FUNCTIONS ---
+# --- EVALUATIONS ---
 def upsert_trainee_evaluation(eval_data: dict):
     conn = get_conn()
     conn.execute("""
@@ -214,7 +194,7 @@ def get_all_evaluations():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- REFRESHER REQUESTS HELPER ---
+# --- REFRESHER REQUESTS & SCHEDULES ---
 def insert_refresher_request(req: dict):
     conn = get_conn()
     conn.execute("""
@@ -241,7 +221,6 @@ def update_refresher_request_status(req_id: str, status: str):
     conn.commit()
     conn.close()
 
-# --- REFRESHER SCHEDULING HELPER ---
 def insert_refresher_schedule(sched: dict):
     conn = get_conn()
     conn.execute("""
@@ -268,7 +247,6 @@ def update_refresher_schedule_status(sched_id: str, status: str):
     conn.commit()
     conn.close()
 
-# --- AGENT SELF-TRAINING SCOREBOARD ---
 def insert_self_training_score(empid: str, name: str, topic_id: str, topic_name: str, score: int, status: str):
     conn = get_conn()
     conn.execute("""
