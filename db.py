@@ -15,7 +15,7 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     
-    # 1. Core Central Database: Topics (Added File Attachment Support)
+    # 1. Core Central Database: Topics
     c.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             id TEXT PRIMARY KEY,
@@ -28,14 +28,25 @@ def init_db():
             process_flow TEXT,
             communication_scripts TEXT,
             quiz_passing_mark INTEGER DEFAULT 0,
-            quiz_questions TEXT, -- JSON string storing array of MCQs
+            quiz_questions TEXT,
             file_name TEXT,
             file_type TEXT,
             file_data BLOB
         )
     """)
     
-    # 2. Induction Training: Trainee Onboarding (Layer 1 & L4)
+    # Auto-migration safety check for missing columns
+    cursor = c.execute("PRAGMA table_info(topics)")
+    columns = [column[1] for column in cursor.fetchall()]
+    
+    if "file_name" not in columns:
+        c.execute("ALTER TABLE topics ADD COLUMN file_name TEXT")
+    if "file_type" not in columns:
+        c.execute("ALTER TABLE topics ADD COLUMN file_type TEXT")
+    if "file_data" not in columns:
+        c.execute("ALTER TABLE topics ADD COLUMN file_data BLOB")
+
+    # 2. Induction Training: Trainee Onboarding
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainees (
             empid TEXT PRIMARY KEY,
@@ -43,24 +54,24 @@ def init_db():
             email TEXT,
             phone TEXT,
             joining_date TEXT,
-            channel TEXT -- Voice, Chat, Email
+            channel TEXT
         )
     """)
     
-    # 3. Induction Training: Daily Roster Grid & Schedule (Layer 2 & L3)
+    # 3. Induction Training: Daily Roster Grid & Schedule
     c.execute("""
         CREATE TABLE IF NOT EXISTS induction_schedule (
             id TEXT PRIMARY KEY,
             date TEXT NOT NULL,
-            time_slot TEXT, -- e.g., "11:00 AM - 01:00 PM"
-            activity_type TEXT, -- Topic, Break, QA/KPI Parameter
+            time_slot TEXT,
+            activity_type TEXT,
             topic_id TEXT,
             manual_activity TEXT,
             FOREIGN KEY(topic_id) REFERENCES topics(id)
         )
     """)
     
-    # 4. Evaluation Engine: Trainee Grades (Layer 3)
+    # 4. Evaluation Engine: Trainee Grades
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainee_evaluations (
             id TEXT PRIMARY KEY,
@@ -81,8 +92,8 @@ def init_db():
             name TEXT NOT NULL,
             channel TEXT,
             topic_id TEXT,
-            preferred_slot TEXT, -- Date & Time string
-            status TEXT DEFAULT 'Pending', -- Pending, Scheduled, Completed
+            preferred_slot TEXT,
+            status TEXT DEFAULT 'Pending',
             FOREIGN KEY(topic_id) REFERENCES topics(id)
         )
     """)
@@ -93,7 +104,7 @@ def init_db():
             id TEXT PRIMARY KEY,
             topic_id TEXT,
             scheduled_time TEXT,
-            agent_ids TEXT, -- JSON array of empids
+            agent_ids TEXT,
             status TEXT DEFAULT 'Active',
             FOREIGN KEY(topic_id) REFERENCES topics(id)
         )
