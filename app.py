@@ -5,13 +5,14 @@ import uuid
 import base64
 import io
 from datetime import datetime, date
+from docx import Document  # python-docx for rendering docx content in portal
 
 import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🎓", layout="wide")
 db.init_db()
 
-# Styling
+# Custom Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -45,6 +46,17 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     background-color:#182420;
     border:1px solid #2A3A34;
     border-radius:14px;
+}
+.doc-viewer-box {
+    background-color: #0F1715;
+    border: 1px solid #2A3A34;
+    padding: 20px;
+    border-radius: 10px;
+    max-height: 500px;
+    overflow-y: auto;
+    color: #EAF2EE;
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -89,7 +101,7 @@ if is_admin_view:
     # ==========================================
     with admin_tab1:
         st.header("Topic & Document Management System")
-        st.caption("Upload document files (PDF/DOCX) and setup a 5-question Quiz for agents.")
+        st.caption("Upload document files (PDF/DOCX) and setup 5-question Quiz for agents.")
         
         with st.expander("➕ Add New Training Topic & Document", expanded=False):
             with st.form("new_topic_form"):
@@ -135,7 +147,6 @@ if is_admin_view:
                     if not t_name or not t_duration or not uploaded_doc:
                         st.error("Topic Name, Duration, and Document File (PDF/DOCX) are mandatory!")
                     else:
-                        # Clean and pack quiz questions
                         valid_quiz = [q for q in quiz_inputs if q["question"].strip() != ""]
                         
                         topic_payload = {
@@ -156,7 +167,7 @@ if is_admin_view:
         st.subheader("Current Topics in Database")
         current_topics = db.get_topics()
         if not current_topics:
-            st.info("No records present inside the Database yet.")
+            st.info("No records present inside Database yet.")
         else:
             for top in current_topics:
                 with st.container(border=True):
@@ -376,31 +387,41 @@ else:
                 selected_topic = topic_options[selected_topic_name]
                 
                 st.markdown(f"### Topic: **{selected_topic['name']}**")
-                st.caption(f"⏱️ Estimated Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
+                st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
                 
-                # DOCUMENT VIEWER PORTAL
+                # DIRECT PORTAL DOCUMENT VIEWER
                 if selected_topic.get("file_name") and selected_topic.get("file_data"):
                     file_bytes = selected_topic["file_data"]
                     file_name = selected_topic["file_name"].lower()
                     
-                    st.markdown(f"#### 📄 Document View: `{selected_topic['file_name']}`")
+                    st.markdown(f"#### 📄 Reading Material: `{selected_topic['file_name']}`")
                     
-                    # 1. Embedded PDF Viewer
+                    # 1. PDF Direct Embedded View
                     if file_name.endswith(".pdf"):
                         base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700" type="application/pdf"></iframe>'
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="650" type="application/pdf"></iframe>'
                         st.markdown(pdf_display, unsafe_allow_html=True)
                     
-                    # 2. DOCX Download Link
-                    else:
-                        st.info("📄 This Word document is ready for download/viewing:")
-                        st.download_button(
-                            label=f"📥 Open/Download {selected_topic['file_name']}",
-                            data=file_bytes,
-                            file_name=selected_topic["file_name"],
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
-                        )
+                    # 2. DOCX Direct Reading View (Extracted & Rendered inside Portal)
+                    elif file_name.endswith(".docx"):
+                        try:
+                            doc_io = io.BytesIO(file_bytes)
+                            document = Document(doc_io)
+                            
+                            doc_html = "<div class='doc-viewer-box'>"
+                            for p in document.paragraphs:
+                                if p.text.strip():
+                                    doc_html += f"<p>{p.text}</p>"
+                            doc_html += "</div>"
+                            
+                            st.markdown(doc_html, unsafe_allow_html=True)
+                        except Exception as e:
+                            st.warning("Could not convert DOCX directly into HTML view. Use option below:")
+                            st.download_button(
+                                label="Download Document File",
+                                data=file_bytes,
+                                file_name=selected_topic["file_name"]
+                            )
                 st.divider()
                 
                 # 5-QUESTION QUIZ ENGINE
