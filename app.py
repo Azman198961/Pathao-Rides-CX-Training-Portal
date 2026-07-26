@@ -100,11 +100,11 @@ if is_admin_view:
                 t_duration = c2.text_input("Duration * (e.g., 45 mins, 1.5 hours)")
                 t_trainer = c3.text_input("Assigned Trainer Name")
                 
-                st.markdown("#### 📁 Upload Training File / Document (PDF, Image, Docx)")
-                uploaded_doc = st.file_uploader("Upload PDF / Document for in-portal view", 
+                st.markdown("#### 📁 Upload Training Document (PDF recommended for live embedded view)")
+                uploaded_doc = st.file_uploader("Upload PDF / PPTX / Docx / Image File", 
                                                 type=["pdf", "docx", "pptx", "png", "jpg", "jpeg"])
                 
-                st.markdown("#### Category Details & Content Tabs (Optional if File Uploaded)")
+                st.markdown("#### Category Details & Content Tabs")
                 det_tabs = st.tabs([
                     "📖 Service Knowledge", "🛠️ Tools Intro", 
                     "✅ Tools Checkpoint", "🔀 Process Flow", 
@@ -178,8 +178,9 @@ if is_admin_view:
             for top in current_topics:
                 with st.container(border=True):
                     col_t1, col_t2 = st.columns([4, 1])
-                    col_t1.markdown(f"### {top['name']}")
-                    col_t1.caption(f"⏱️ Duration: {top['duration']} | 👤 Trainer: {top['trainer_name'] or 'Unassigned'} | 📁 Attachment: {top['file_name'] or 'None'}")
+                    col_t1.markdown(f"### {top.get('name', 'Unnamed Topic')}")
+                    file_attached = top.get('file_name') or 'None'
+                    col_t1.caption(f"⏱️ Duration: {top.get('duration', '')} | 👤 Trainer: {top.get('trainer_name') or 'Unassigned'} | 📁 Attachment: {file_attached}")
                     
                     with col_t2:
                         if st.button("🗑️ Delete Topic", key=f"del_{top['id']}"):
@@ -368,7 +369,6 @@ if is_admin_view:
             else:
                 eval_df = pd.DataFrame(raw_evals)
                 
-                # Dynamic calculations metrics mapping out scorecard profiles
                 eval_df['Total Score'] = (eval_df['quiz_score'] + eval_df['assignment_score']) / 2
                 summary_agg = eval_df.groupby(['empid', 'trainee_name', 'channel'])['Total Score'].mean().reset_index()
                 
@@ -533,26 +533,36 @@ else:
                 st.markdown(f"### Study Material: **{selected_topic['name']}**")
                 st.caption(f"⏱️ Estimated Study Time: {selected_topic['duration']}")
                 
-                # IN-PORTAL EMBEDDED DOCUMENT VIEWER
+                # HYBRID IN-PORTAL DOCUMENT VIEWER
                 if selected_topic.get("file_name") and selected_topic.get("file_data"):
                     st.markdown(f"#### 📄 Training Document View: `{selected_topic['file_name']}`")
                     
                     file_bytes = selected_topic["file_data"]
                     file_name = selected_topic["file_name"].lower()
                     
-                    # Direct PDF Viewing via iframe
+                    # 1. Direct Embedded PDF Viewer
                     if file_name.endswith(".pdf"):
                         base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
                         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
                         st.markdown(pdf_display, unsafe_allow_html=True)
-                    # Image Preview
+                    
+                    # 2. Direct Embedded Image Preview
                     elif file_name.endswith((".png", ".jpg", ".jpeg")):
                         st.image(file_bytes, use_column_width=True)
+                    
+                    # 3. PPTX / DOCX Download & Fallback Handler
                     else:
-                        st.info(f"Attached File: **{selected_topic['file_name']}** (Direct preview is best optimized for PDF/Images).")
+                        st.warning(f"💡 `{selected_topic['file_name']}` প্রেজেন্টেশনটি দেখতে নিচে 'Download Presentation' বাটনে ক্লিক করুন। (অন-স্ক্রিনে সরাসরি স্লাইড দেখতে চাইলে অ্যাডমিন থেকে ফাইলটি **PDF** করে আপলোড করুন)।")
+                        st.download_button(
+                            label=f"📥 Download Presentation ({selected_topic['file_name']})",
+                            data=file_bytes,
+                            file_name=selected_topic["file_name"],
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation" if file_name.endswith(".pptx") else "application/octet-stream",
+                            use_container_width=True
+                        )
                     st.divider()
                 
-                # Text Tabs (Shown if present)
+                # Text Tabs
                 study_tabs = st.tabs([
                     "📖 Core Knowledge", 
                     "🛠️ Tools & Systems", 
@@ -562,27 +572,27 @@ else:
                 
                 with study_tabs[0]:
                     st.markdown("#### Service Knowledge Guidelines")
-                    st.write(selected_topic["service_knowledge"] or "Detailed in attached document above.")
+                    st.write(selected_topic.get("service_knowledge") or "Detailed in attached document above.")
                 with study_tabs[1]:
                     st.markdown("#### Required Systems & Checkpoints")
-                    st.write(selected_topic["tools_introduction"] or "Detailed in attached document above.")
-                    if selected_topic["tools_checkpoint"]:
+                    st.write(selected_topic.get("tools_introduction") or "Detailed in attached document above.")
+                    if selected_topic.get("tools_checkpoint"):
                         st.markdown("**Action Checkpoints:**")
                         for point in selected_topic["tools_checkpoint"].split("\n"):
                             st.checkbox(point, key=f"cp_{selected_topic['id']}_{point[:15]}")
                 with study_tabs[2]:
                     st.markdown("#### Workflow Resolution Path")
-                    st.info(selected_topic["process_flow"] or "Detailed in attached document above.")
+                    st.info(selected_topic.get("process_flow") or "Detailed in attached document above.")
                 with study_tabs[3]:
                     st.markdown("#### Communication Scripts & Templates")
-                    st.write(selected_topic["communication_scripts"] or "Detailed in attached document above.")
+                    st.write(selected_topic.get("communication_scripts") or "Detailed in attached document above.")
                 
                 st.divider()
                 
                 # Dynamic Quiz Engine
                 st.markdown("### 📝 Dynamic Evaluation Check")
                 try:
-                    quiz_data = json.loads(selected_topic["quiz_questions"])
+                    quiz_data = json.loads(selected_topic.get("quiz_questions", "[]"))
                 except Exception:
                     quiz_data = []
                     
@@ -608,7 +618,7 @@ else:
                                 correct_count += 1
                                 
                         score_percentage = int((correct_count / len(quiz_data)) * 100)
-                        passing_score = selected_topic["quiz_passing_mark"]
+                        passing_score = selected_topic.get("quiz_passing_mark", 80)
                         
                         if score_percentage >= passing_score:
                             st.balloons()
