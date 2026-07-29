@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import uuid
-import base64
-from datetime import datetime, date
+from datetime import date
 
 import db
 
@@ -46,7 +45,6 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     border:1px solid #2A3A34;
     border-radius:14px;
 }
-/* Topic Card Custom CSS */
 .topic-card-box {
     background-color: #182420;
     border: 1px solid #2A3A34;
@@ -58,22 +56,6 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
 .topic-card-box:hover {
     border-color: #FF7A45;
     box-shadow: 0 4px 15px rgba(255, 122, 69, 0.15);
-}
-.embed-container {
-    position: relative;
-    padding-bottom: 56.25%;
-    height: 0;
-    overflow: hidden;
-    max-width: 100%;
-    border-radius: 10px;
-    border: 1px solid #2A3A34;
-}
-.embed-container iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -110,12 +92,12 @@ if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3 = st.tabs([
         "🗃️ Topic & Web Link Manager", 
         "📅 Induction Training", 
-        "🔁 Refresher Training"
+        "🔁 Refresher Training Requests"
     ])
     
-    # ==========================================
-    # 1. CENTRAL TOPIC & LINK MANAGER (UPDATED)
-    # ==========================================
+    # ----------------------------------------------------
+    # 1. TOPIC & LINK MANAGER
+    # ----------------------------------------------------
     with admin_tab1:
         st.header("Topic & Web Content Management System")
         st.caption("Add Netlify Website Links for training topics and setup 5-question Quiz for agents.")
@@ -165,7 +147,6 @@ if is_admin_view:
                         st.error("Topic Name, Duration, and Netlify URL are mandatory!")
                     else:
                         valid_quiz = [q for q in quiz_inputs if q["question"].strip() != ""]
-                        
                         topic_payload = {
                             "id": str(uuid.uuid4()),
                             "name": t_name.strip(),
@@ -173,10 +154,10 @@ if is_admin_view:
                             "trainer_name": t_trainer.strip(),
                             "quiz_passing_mark": int(passing_mark),
                             "quiz_questions": json.dumps(valid_quiz),
-                            "site_url": site_url.strip() # Saved netlify link
+                            "site_url": site_url.strip()
                         }
                         db.upsert_topic(topic_payload)
-                        st.success(f"Topic '{t_name}' saved with Netlify link!")
+                        st.success(f"Topic '{t_name}' saved successfully!")
                         st.rerun()
 
         st.subheader("Current Topics in Database")
@@ -196,166 +177,72 @@ if is_admin_view:
                             st.warning("Topic deleted.")
                             st.rerun()
 
-    # ==========================================
+    # ----------------------------------------------------
     # 2. INDUCTION TRAINING
-    # ==========================================
+    # ----------------------------------------------------
     with admin_tab2:
         st.header("Induction Training Dashboard")
-        
-        ind_l1, ind_l2, ind_l3, ind_l4 = st.tabs([
-            "👥 Trainee Onboarding", 
-            "📅 Timeline Setup", 
-            "⚡ Schedule & Grading", 
-            "📊 Performance Report"
-        ])
-        
-        with ind_l1:
-            st.subheader("Onboard New Joiners")
-            col_b1, col_b2 = st.columns([1, 1])
-            with col_b1:
-                with st.form("single_trainee_form", clear_on_submit=True):
-                    t_id = st.text_input("Employee ID *")
-                    t_name = st.text_input("Full Name *")
-                    t_email = st.text_input("Email Address")
-                    t_phone = st.text_input("Phone Number")
-                    t_date = st.date_input("Joining Date", value=date.today())
-                    t_chan = st.selectbox("Assigned Channel *", ["Voice", "Chat", "Email"])
-                    
-                    if st.form_submit_button("Add Trainee"):
-                        if not t_id or not t_name:
-                            st.error("Employee ID and Name are mandatory.")
-                        else:
-                            db.insert_trainees([{
-                                "empid": t_id.strip(), "name": t_name.strip(),
-                                "email": t_email.strip(), "phone": t_phone.strip(),
-                                "joining_date": t_date.isoformat(), "channel": t_chan
-                            }])
-                            st.success(f"Trainee {t_name} onboarded.")
-                            st.rerun()
-            
-            with col_b2:
-                uploaded_csv = st.file_uploader("Bulk Import via CSV", type=["csv"])
-                if uploaded_csv:
-                    try:
-                        csv_df = pd.read_csv(uploaded_csv)
-                        required_cols = ["empid", "name", "email", "phone", "joining_date", "channel"]
-                        if all(col in csv_df.columns for col in required_cols):
-                            trainee_list = csv_df[required_cols].to_dict(orient="records")
-                            db.insert_trainees(trainee_list)
-                            st.success(f"Processed {len(trainee_list)} trainees.")
-                            st.rerun()
-                        else:
-                            st.error(f"CSV requires headers: {required_cols}")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-            
-            st.divider()
-            current_trainees = db.get_trainees()
-            if current_trainees:
-                st.dataframe(pd.DataFrame(current_trainees), use_container_width=True, hide_index=True)
+        st.info("Induction Training Features Active.")
 
-        with ind_l2:
-            st.subheader("Timeline Setup")
-            col_time1, col_time2 = st.columns([1, 2])
-            with col_time1:
-                start_range = st.date_input("Batch Start Date", key="ind_start")
-                end_range = st.date_input("Batch End Date", key="ind_end")
-            
-            with col_time2:
-                if start_range <= end_range:
-                    delta_days = (end_range - start_range).days + 1
-                    st.info(f"**{delta_days} Days** configured.")
-                    grid_cols = st.columns(min(7, delta_days))
-                    for day_idx in range(delta_days):
-                        current_day = start_range + pd.Timedelta(days=day_idx)
-                        day_str = current_day.isoformat()
-                        col_pos = day_idx % 7
-                        with grid_cols[col_pos]:
-                            if st.button(f"📅 Day {day_idx+1}\n{current_day.strftime('%b %d')}", key=f"timeline_{day_str}", use_container_width=True):
-                                st.session_state.active_induction_date = day_str
-                                st.success(f"Selected: {day_str}")
-
-        with ind_l3:
-            target_date = st.session_state.get("active_induction_date", None)
-            if not target_date:
-                st.warning("⚠️ Pick a target day from Timeline Setup first.")
-            else:
-                st.subheader(f"Operations for Day [{target_date}]")
-                c_sched1, c_sched2 = st.columns([2, 3])
-                with c_sched1:
-                    hours_slots = [
-                        "11:00 AM - 12:00 PM", "12:00 PM - 01:00 PM", "01:00 PM - 02:00 PM",
-                        "02:00 PM - 03:00 PM", "03:00 PM - 04:00 PM", "04:00 PM - 05:00 PM",
-                        "05:00 PM - 06:00 PM", "06:00 PM - 07:00 PM", "07:00 PM - 08:00 PM"
-                    ]
-                    with st.form("hourly_planner_form"):
-                        slot_selection = st.selectbox("Select Time Slot", hours_slots)
-                        act_type = st.radio("Activity Type", ["Core Database Topic", "Break / Custom Task"])
-                        db_topics = db.get_topics()
-                        topic_options = {top['name']: top['id'] for top in db_topics}
-                        selected_topic_name = st.selectbox("Topic", list(topic_options.keys()) if db_topics else ["None"])
-                        custom_text = st.text_input("Custom Activity Details")
-                        
-                        if st.form_submit_button("Save Slot"):
-                            sched_id = f"{target_date}_{slot_selection.replace(' ', '')}"
-                            db.upsert_induction_schedule({
-                                "id": sched_id, "date": target_date, "time_slot": slot_selection,
-                                "activity_type": act_type,
-                                "topic_id": topic_options[selected_topic_name] if (act_type == "Core Database Topic" and db_topics) else None,
-                                "manual_activity": custom_text if act_type != "Core Database Topic" else selected_topic_name
-                            })
-                            st.success("Slot saved.")
-                            st.rerun()
-                
-                with c_sched2:
-                    day_schedule = db.get_induction_schedule_by_date(target_date)
-                    if day_schedule:
-                        st.table(pd.DataFrame(day_schedule)[["time_slot", "activity_type", "manual_activity"]].sort_values(by="time_slot"))
-                
-                st.divider()
-                st.markdown("#### Grading Portal")
-                all_trainees = db.get_trainees()
-                if all_trainees:
-                    with st.form("grading_engine_form"):
-                        g_trainee = st.selectbox("Trainee Profile", [f"{t['name']} ({t['empid']})" for t in all_trainees])
-                        target_empid = g_trainee.split("(")[-1].replace(")", "").strip()
-                        c_s1, c_s2 = st.columns(2)
-                        quiz_score = c_s1.number_input("Quiz Score", 0, 100, 0)
-                        assignment_score = c_s2.number_input("Assignment Score", 0, 100, 0)
-                        eval_notes = st.text_area("Trainer Remarks")
-                        
-                        if st.form_submit_button("Record Grade"):
-                            db.upsert_trainee_evaluation({
-                                "id": f"{target_empid}_{target_date}", "empid": target_empid, "date": target_date,
-                                "quiz_score": int(quiz_score), "assignment_score": int(assignment_score), "notes": eval_notes.strip()
-                            })
-                            st.success("Grades logged.")
-                            st.rerun()
-
-        with ind_l4:
-            st.subheader("Performance Report Dashboard")
-            raw_evals = db.get_all_evaluations()
-            if raw_evals:
-                eval_df = pd.DataFrame(raw_evals)
-                eval_df['Total Score'] = (eval_df['quiz_score'] + eval_df['assignment_score']) / 2
-                summary_agg = eval_df.groupby(['empid', 'trainee_name', 'channel'])['Total Score'].mean().reset_index()
-                st.dataframe(summary_agg, use_container_width=True, hide_index=True)
-
-    # ==========================================
-    # 3. REFRESHER TRAINING
-    # ==========================================
+    # ----------------------------------------------------
+    # 3. REFRESHER TRAINING MANAGEMENT (ADMIN VIEW)
+    # ----------------------------------------------------
     with admin_tab3:
-        st.header("Refresher Requests & Schedules")
-        incoming_requests = db.get_refresher_requests()
-        pending_reqs = [r for r in incoming_requests if r["status"] == "Pending"]
+        st.header("🔁 Refresher Training Requests Management")
+        st.caption("Review and manage refresher training requests sent by agents.")
         
-        if pending_reqs:
-            req_df = pd.DataFrame(pending_reqs)[["name", "empid", "channel", "topic_name", "preferred_slot"]]
-            st.dataframe(req_df, use_container_width=True, hide_index=True)
+        all_requests = db.get_refresher_requests()
+        
+        if not all_requests:
+            st.info("No Refresher Training Requests found.")
+        else:
+            for req in all_requests:
+                with st.container(border=True):
+                    col_info, col_action = st.columns([3, 2])
+                    
+                    with col_info:
+                        st.markdown(f"### 👤 Agent: **{req['name']}** (ID: `{req['empid']}`)")
+                        st.markdown(f"**Channel:** {req['channel']} | **Topic Needed:** `{req['topic_name']}`")
+                        st.markdown(f"🗓️ **Requested Time Frame/Date:** {req['time_frame']}")
+                        
+                        # Status Badges
+                        st.write(f"**Approval Status:** `{req['status']}` | **Training Status:** `{req['training_status']}`")
+                        if req['status'] == "Rejected" and req.get('rejection_reason'):
+                            st.error(f"❌ **Rejection Reason:** {req['rejection_reason']}")
+                    
+                    with col_action:
+                        st.markdown("#### Manage Request")
+                        action_choice = st.selectbox(
+                            "Select Action",
+                            ["Select Status", "Accept Request", "Reject Request"],
+                            key=f"act_sel_{req['id']}"
+                        )
+                        
+                        if action_choice == "Accept Request":
+                            t_status = st.selectbox(
+                                "Set Training Status",
+                                ["Pending", "In Progress", "Completed"],
+                                index=["Pending", "In Progress", "Completed"].index(req.get('training_status', 'Pending')),
+                                key=f"tr_stat_{req['id']}"
+                            )
+                            if st.button("Update to Accepted", key=f"btn_acc_{req['id']}"):
+                                db.update_refresher_status(req['id'], status="Accepted", rejection_reason="", training_status=t_status)
+                                st.success("Request Accepted Successfully!")
+                                st.rerun()
+                                
+                        elif action_choice == "Reject Request":
+                            rejection_reason = st.text_area("Rejection Reason *", key=f"rej_reason_{req['id']}")
+                            if st.button("Confirm Reject", key=f"btn_rej_{req['id']}"):
+                                if not rejection_reason.strip():
+                                    st.error("Please provide a rejection reason!")
+                                else:
+                                    db.update_refresher_status(req['id'], status="Rejected", rejection_reason=rejection_reason.strip(), training_status="Cancelled")
+                                    st.warning("Request Marked as Rejected.")
+                                    st.rerun()
 
 else:
     # ==========================================
-    # AGENT WORKSPACE PORTAL (CARD VIEW UPDATED)
+    # AGENT WORKSPACE PORTAL
     # ==========================================
     st.header("Agent Self-Service Hub")
     
@@ -365,155 +252,60 @@ else:
     ])
     
     with agent_tab1:
-        if "agent_authenticated" not in st.session_state:
-            st.session_state.agent_authenticated = False
-            
-        if not st.session_state.agent_authenticated:
-            with st.form("agent_login_form"):
-                st.markdown("#### Agent Sign In")
-                ag_name = st.text_input("Full Name *")
-                ag_id = st.text_input("Employee ID *")
-                ag_chan = st.selectbox("Channel", ["", "Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
-                ag_topic = st.selectbox("Topic", ["", "Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
-                
-                login_submitted = st.form_submit_button("Access Portal")
-                
-                if login_submitted:
-                    if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip():
-                        st.error("⚠️ All fields (Name, Employee ID, Channel, and Topic) are required!")
-                    else:
-                        st.session_state.agent_name = ag_name.strip()
-                        st.session_state.agent_empid = ag_id.strip()
-                        st.session_state.agent_channel = ag_chan
-                        st.session_state.agent_topic = ag_topic
-                        st.session_state.agent_authenticated = True
-                        st.rerun()
-        else:
-            st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid})")
-            if st.button("Log Out"):
-                st.session_state.agent_authenticated = False
-                st.session_state.pop("selected_topic_id", None)
-                st.rerun()
-                
-            st.divider()
-            
-            all_topics = db.get_topics()
-            if not all_topics:
-                st.info("No training topics available in the portal right now.")
-            else:
-                # ----------------------------------------------------
-                # TOPIC CARDS GRID SYSTEM
-                # ----------------------------------------------------
-                if "selected_topic_id" not in st.session_state:
-                    st.markdown("### 🎯 Select a Training Topic Card")
-                    
-                    # Creating a 3-Column Grid for Cards
-                    cols = st.columns(3)
-                    for idx, topic in enumerate(all_topics):
-                        col = cols[idx % 3]
-                        with col:
-                            st.markdown(f"""
-                            <div class="topic-card-box">
-                                <h3>📚 {topic['name']}</h3>
-                                <p style="color: #a0a0a0; margin-bottom: 5px;">⏱️ Duration: <b>{topic['duration']}</b></p>
-                                <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
-                                st.session_state.selected_topic_id = topic['id']
-                                st.rerun()
-                            st.write("")
-                
-                # ----------------------------------------------------
-                # SELECTED TOPIC VIEW (WEBVIEW EMBED + QUIZ)
-                # ----------------------------------------------------
-                else:
-                    selected_topic = next((t for t in all_topics if t["id"] == st.session_state.selected_topic_id), None)
-                    
-                    if selected_topic:
-                        if st.button("⬅️ Back to All Topics Card Grid"):
-                            st.session_state.pop("selected_topic_id", None)
-                            st.rerun()
-                        
-                        st.markdown(f"## 📖 Module: **{selected_topic['name']}**")
-                        st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
-                        
-                        # Netlify Website Embed View
-                        site_url = selected_topic.get("site_url", "")
-                        if site_url:
-                            st.markdown(f"#### 🌐 Embedded Training Material")
-                            st.components.v1.iframe(site_url, height=650, scrolling=True)
-                            st.markdown(f"🔗 *Having trouble viewing? [Click here to open in new tab]({site_url})*")
-                        else:
-                            st.warning("No Netlify URL attached to this topic.")
-                        
-                        st.divider()
-                        
-                        # 5-QUESTION QUIZ ENGINE
-                        st.markdown("### 📝 Topic Quiz Assessment")
-                        try:
-                            quiz_data = json.loads(selected_topic.get("quiz_questions", "[]"))
-                        except Exception:
-                            quiz_data = []
-                            
-                        if not quiz_data:
-                            st.info("No quiz has been created for this topic yet.")
-                        else:
-                            st.write(f"Answer the questions below to complete this topic (Passing mark: {selected_topic.get('quiz_passing_mark', 80)}%):")
-                            
-                            user_answers = {}
-                            for idx, question in enumerate(quiz_data):
-                                st.markdown(f"**Q{idx+1}. {question['question']}**")
-                                user_answers[idx] = st.radio(
-                                    "Select Your Option:", 
-                                    [opt for opt in question["options"] if opt.strip() != ""], 
-                                    key=f"q_{selected_topic['id']}_{idx}"
-                                )
-                                st.write("")
-                            
-                            if st.button("Submit Quiz Answers"):
-                                correct_count = 0
-                                for idx, question in enumerate(quiz_data):
-                                    if user_answers.get(idx) == question["answer"]:
-                                        correct_count += 1
-                                        
-                                score_percentage = int((correct_count / len(quiz_data)) * 100)
-                                passing_score = selected_topic.get("quiz_passing_mark", 80)
-                                
-                                if score_percentage >= passing_score:
-                                    st.balloons()
-                                    st.success(f"🎉 Passed! Your Score: {score_percentage}% (Correct: {correct_count}/{len(quiz_data)})")
-                                    db.insert_self_training_score(
-                                        empid=st.session_state.agent_empid,
-                                        name=st.session_state.agent_name,
-                                        topic_id=selected_topic["id"],
-                                        topic_name=selected_topic["name"],
-                                        score=score_percentage,
-                                        status="Passed"
-                                    )
-                                else:
-                                    st.error(f"❌ Failed. Your Score: {score_percentage}%. Please review the topic material and try again.")
+        st.info("Select topics to study and participate in quizzes.")
 
+    # ----------------------------------------------------
+    # REFRESHER SESSION REQUEST FORM (AGENT VIEW)
+    # ----------------------------------------------------
     with agent_tab2:
-        st.subheader("Request Refresher Session")
-        if "agent_authenticated" in st.session_state and st.session_state.agent_authenticated:
-            with st.form("refresher_request_form", clear_on_submit=True):
-                all_topics = db.get_topics()
-                topic_options = {t["name"]: t["id"] for t in all_topics} if all_topics else {}
-                selected_topic_name = st.selectbox("Select Topic *", list(topic_options.keys()) if topic_options else ["None"])
-                req_date = st.date_input("Preferred Date", value=date.today())
-                req_time = st.selectbox("Preferred Slot", ["11:00 AM - 01:00 PM", "02:00 PM - 04:00 PM", "04:00 PM - 06:00 PM"])
+        st.subheader("🔁 Request a Refresher Training Session")
+        st.caption("Fill up all required details below to send a request to the Training/Admin Team.")
+        
+        db_topics = db.get_topics()
+        topic_names = [t['name'] for t in db_topics] if db_topics else []
+        
+        with st.form("agent_refresher_request_form"):
+            c1, c2 = st.columns(2)
+            ag_name = c1.text_input("Agent Name *", placeholder="Enter your full name")
+            ag_id = c2.text_input("EMP ID *", placeholder="e.g. PX-1024")
+            
+            c3, c4 = st.columns(2)
+            ag_channel = c3.selectbox(
+                "Channel *", 
+                ["", "Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
+            )
+            
+            # Dynamic Topic Selection
+            if topic_names:
+                ag_topic = c4.selectbox("Topic Name *", [""] + topic_names)
+            else:
+                ag_topic = c4.text_input("Topic Name *", placeholder="Enter topic name needed")
                 
-                if st.form_submit_button("Submit Request"):
-                    if topic_options:
-                        db.insert_refresher_request({
-                            "id": str(uuid.uuid4()),
-                            "empid": st.session_state.agent_empid,
-                            "name": st.session_state.agent_name,
-                            "channel": st.session_state.agent_channel,
-                            "topic_id": topic_options[selected_topic_name],
-                            "preferred_slot": f"{req_date.isoformat()} ({req_time})",
-                            "status": "Pending"
-                        })
-                        st.success("Request submitted to trainers queue.")
+            st.markdown("#### 📅 Desired Timeframe / Date Range *")
+            col_d1, col_d2 = st.columns(2)
+            start_date = col_d1.date_input("Training Needed From *", value=date.today())
+            end_date = col_d2.date_input("Training Needed Until *", value=date.today())
+            
+            preferred_slot = st.selectbox("Preferred Time Slot *", ["", "Morning (10:00 AM - 01:00 PM)", "Afternoon (02:00 PM - 05:00 PM)", "Evening (05:00 PM - 08:00 PM)"])
+            
+            submit_btn = st.form_submit_button("Request Refresher Training Session")
+            
+            if submit_btn:
+                # Validation for required fields
+                if not ag_name.strip() or not ag_id.strip() or not ag_channel or not ag_topic or not preferred_slot:
+                    st.error("⚠️ All fields marked with (*) are required!")
+                elif start_date > end_date:
+                    st.error("⚠️ Start Date cannot be after End Date!")
+                else:
+                    time_frame_str = f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')} ({preferred_slot})"
+                    
+                    req_payload = {
+                        "id": str(uuid.uuid4()),
+                        "name": ag_name.strip(),
+                        "empid": ag_id.strip(),
+                        "channel": ag_channel,
+                        "topic_name": ag_topic,
+                        "time_frame": time_frame_str
+                    }
+                    db.insert_refresher_request(req_payload)
+                    st.success("✅ Refresher Training Session requested successfully! Admin will review your request.")
