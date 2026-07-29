@@ -1,4 +1,4 @@
-# db.py — Cleaned Database Layer for Document & 5-MCQ Quiz Architecture
+# db.py — Database Layer Updated for Netlify Web Embed & 5-MCQ Quiz Architecture
 import sqlite3
 import os
 import json
@@ -15,7 +15,7 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     
-    # 1. Simplified Core Topics Database Table
+    # 1. Updated Core Topics Database Table (Includes site_url for Netlify Integration)
     c.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             id TEXT PRIMARY KEY,
@@ -24,13 +24,17 @@ def init_db():
             trainer_name TEXT,
             quiz_passing_mark INTEGER DEFAULT 80,
             quiz_questions TEXT,
-            file_name TEXT,
-            file_type TEXT,
-            file_data BLOB
+            site_url TEXT
         )
     """)
 
-    # 2. Trainee Onboarding
+    # Safe Schema Migration Check (Adds site_url column if database already exists)
+    try:
+        c.execute("ALTER TABLE topics ADD COLUMN site_url TEXT")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+
+    # 2. Trainee Onboarding Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainees (
             empid TEXT PRIMARY KEY,
@@ -42,7 +46,7 @@ def init_db():
         )
     """)
     
-    # 3. Induction Schedule
+    # 3. Induction Schedule Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS induction_schedule (
             id TEXT PRIMARY KEY,
@@ -55,7 +59,7 @@ def init_db():
         )
     """)
     
-    # 4. Trainee Evaluations
+    # 4. Trainee Evaluations Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS trainee_evaluations (
             id TEXT PRIMARY KEY,
@@ -68,7 +72,7 @@ def init_db():
         )
     """)
 
-    # 5. Refresher Requests
+    # 5. Refresher Requests Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS refresher_requests (
             id TEXT PRIMARY KEY,
@@ -82,7 +86,7 @@ def init_db():
         )
     """)
     
-    # 6. Refresher Schedules
+    # 6. Refresher Schedules Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS refresher_schedules (
             id TEXT PRIMARY KEY,
@@ -101,17 +105,15 @@ def init_db():
 def upsert_topic(topic: dict):
     conn = get_conn()
     conn.execute("""
-        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, file_name, file_type, file_data)
-        VALUES (:id, :name, :duration, :trainer_name, :quiz_passing_mark, :quiz_questions, :file_name, :file_type, :file_data)
+        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, site_url)
+        VALUES (:id, :name, :duration, :trainer_name, :quiz_passing_mark, :quiz_questions, :site_url)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             duration=excluded.duration,
             trainer_name=excluded.trainer_name,
             quiz_passing_mark=excluded.quiz_passing_mark,
             quiz_questions=excluded.quiz_questions,
-            file_name=COALESCE(excluded.file_name, topics.file_name),
-            file_type=COALESCE(excluded.file_type, topics.file_type),
-            file_data=COALESCE(excluded.file_data, topics.file_data)
+            site_url=excluded.site_url
     """, topic)
     conn.commit()
     conn.close()
