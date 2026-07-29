@@ -373,7 +373,9 @@ else:
                 st.markdown("#### Agent Sign In")
                 ag_name = st.text_input("Full Name *")
                 ag_id = st.text_input("Employee ID *")
-                ag_chan = st.selectbox("Channel", ["Voice", "Chat", "Email"])
+                ag_chan = st.selectbox("Channel", ["Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
+                ag_topic = st.selectbox("Topic", ["Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
+                
                 
                 if st.form_submit_button("Access Portal"):
                     if not ag_name or not ag_id:
