@@ -9,7 +9,20 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Refresher table update
+    # 1. Topics Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS topics (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        duration TEXT,
+        trainer_name TEXT,
+        quiz_passing_mark INTEGER,
+        quiz_questions TEXT,
+        site_url TEXT
+    )
+    """)
+
+    # 2. Refresher Requests Table (Updated)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS refresher_requests (
         id TEXT PRIMARY KEY,
@@ -17,7 +30,7 @@ def init_db():
         name TEXT,
         channel TEXT,
         topic_name TEXT,
-        time_frame TEXT,
+        preferred_slot TEXT,
         status TEXT DEFAULT 'Pending',
         rejection_reason TEXT DEFAULT '',
         training_status TEXT DEFAULT 'Pending'
@@ -26,13 +39,45 @@ def init_db():
     conn.commit()
     conn.close()
 
+def upsert_topic(data):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, site_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name,
+            duration=excluded.duration,
+            trainer_name=excluded.trainer_name,
+            quiz_passing_mark=excluded.quiz_passing_mark,
+            quiz_questions=excluded.quiz_questions,
+            site_url=excluded.site_url
+    """, (data['id'], data['name'], data['duration'], data['trainer_name'], data['quiz_passing_mark'], data['quiz_questions'], data['site_url']))
+    conn.commit()
+    conn.close()
+
+def get_topics():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM topics")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def delete_topic(topic_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+    conn.commit()
+    conn.close()
+
 def insert_refresher_request(data):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO refresher_requests (id, empid, name, channel, topic_name, time_frame, status, training_status)
+        INSERT INTO refresher_requests (id, empid, name, channel, topic_name, preferred_slot, status, training_status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (data['id'], data['empid'], data['name'], data['channel'], data['topic_name'], data['time_frame'], 'Pending', 'Pending'))
+    """, (data['id'], data['empid'], data['name'], data['channel'], data['topic_name'], data['preferred_slot'], 'Pending', 'Pending'))
     conn.commit()
     conn.close()
 
