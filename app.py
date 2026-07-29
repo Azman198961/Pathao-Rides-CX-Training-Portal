@@ -373,21 +373,21 @@ else:
                 st.markdown("#### Agent Sign In")
                 ag_name = st.text_input("Full Name *")
                 ag_id = st.text_input("Employee ID *")
-                ag_chan = st.selectbox("Channel", [" ", "Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
-                ag_topic = st.selectbox("Topic", [" ", "Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
+                ag_chan = st.selectbox("Channel", ["", "Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
+                ag_topic = st.selectbox("Topic", ["", "Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
                 
+                login_submitted = st.form_submit_button("Access Portal")
                 
-                if st.form_submit_button("Access Portal"):
-    # ৪টি ফিল্ডের কোনো একটি খালি থাকলেই এরর দেখাবে
-    if not ag_name.strip() or not ag_id.strip() or not ag_chan or not ag_topic:
-        st.error("⚠️ All fields (Name, Employee ID, Channel, and Topic) are required!")
-    else:
-        st.session_state.agent_name = ag_name.strip()
-        st.session_state.agent_empid = ag_id.strip()
-        st.session_state.agent_channel = ag_chan
-        st.session_state.agent_topic = ag_topic  # session_state-এ topic সেভ করা হলো
-        st.session_state.agent_authenticated = True
-        st.rerun()
+                if login_submitted:
+                    if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip():
+                        st.error("⚠️ All fields (Name, Employee ID, Channel, and Topic) are required!")
+                    else:
+                        st.session_state.agent_name = ag_name.strip()
+                        st.session_state.agent_empid = ag_id.strip()
+                        st.session_state.agent_channel = ag_chan
+                        st.session_state.agent_topic = ag_topic
+                        st.session_state.agent_authenticated = True
+                        st.rerun()
         else:
             st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid})")
             if st.button("Log Out"):
