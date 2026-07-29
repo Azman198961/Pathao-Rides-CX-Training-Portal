@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import uuid
-from datetime import date
+import base64
+from datetime import datetime, date
 
 import db
 
@@ -45,6 +46,7 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     border:1px solid #2A3A34;
     border-radius:14px;
 }
+/* Topic Card Custom CSS */
 .topic-card-box {
     background-color: #182420;
     border: 1px solid #2A3A34;
@@ -56,6 +58,22 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
 .topic-card-box:hover {
     border-color: #FF7A45;
     box-shadow: 0 4px 15px rgba(255, 122, 69, 0.15);
+}
+.embed-container {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    overflow: hidden;
+    max-width: 100%;
+    border-radius: 10px;
+    border: 1px solid #2A3A34;
+}
+.embed-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -92,12 +110,12 @@ if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3 = st.tabs([
         "🗃️ Topic & Web Link Manager", 
         "📅 Induction Training", 
-        "🔁 Refresher Training Requests"
+        "🔁 Refresher Training"
     ])
     
-    # ----------------------------------------------------
-    # 1. TOPIC & LINK MANAGER
-    # ----------------------------------------------------
+    # ==========================================
+    # 1. CENTRAL TOPIC & LINK MANAGER
+    # ==========================================
     with admin_tab1:
         st.header("Topic & Web Content Management System")
         st.caption("Add Netlify Website Links for training topics and setup 5-question Quiz for agents.")
@@ -147,6 +165,7 @@ if is_admin_view:
                         st.error("Topic Name, Duration, and Netlify URL are mandatory!")
                     else:
                         valid_quiz = [q for q in quiz_inputs if q["question"].strip() != ""]
+                        
                         topic_payload = {
                             "id": str(uuid.uuid4()),
                             "name": t_name.strip(),
@@ -157,7 +176,7 @@ if is_admin_view:
                             "site_url": site_url.strip()
                         }
                         db.upsert_topic(topic_payload)
-                        st.success(f"Topic '{t_name}' saved successfully!")
+                        st.success(f"Topic '{t_name}' saved with Netlify link!")
                         st.rerun()
 
         st.subheader("Current Topics in Database")
@@ -177,44 +196,43 @@ if is_admin_view:
                             st.warning("Topic deleted.")
                             st.rerun()
 
-    # ----------------------------------------------------
+    # ==========================================
     # 2. INDUCTION TRAINING
-    # ----------------------------------------------------
+    # ==========================================
     with admin_tab2:
         st.header("Induction Training Dashboard")
-        st.info("Induction Training Features Active.")
+        st.info("Induction Training Active.")
 
-    # ----------------------------------------------------
-    # 3. REFRESHER TRAINING MANAGEMENT (ADMIN VIEW)
-    # ----------------------------------------------------
+    # ==========================================
+    # 3. REFRESHER TRAINING (ADMIN VIEW UPDATED)
+    # ==========================================
     with admin_tab3:
         st.header("🔁 Refresher Training Requests Management")
-        st.caption("Review and manage refresher training requests sent by agents.")
+        st.caption("Review requests sent by agents and update approval/training status.")
         
         all_requests = db.get_refresher_requests()
         
         if not all_requests:
-            st.info("No Refresher Training Requests found.")
+            st.info("No Refresher Training Requests found in system.")
         else:
             for req in all_requests:
                 with st.container(border=True):
                     col_info, col_action = st.columns([3, 2])
                     
                     with col_info:
-                        st.markdown(f"### 👤 Agent: **{req['name']}** (ID: `{req['empid']}`)")
-                        st.markdown(f"**Channel:** {req['channel']} | **Topic Needed:** `{req['topic_name']}`")
-                        st.markdown(f"🗓️ **Requested Time Frame/Date:** {req['time_frame']}")
+                        st.markdown(f"### 👤 Agent: **{req['name']}** (EMP ID: `{req['empid']}`)")
+                        st.markdown(f"**Channel:** {req['channel']} | **Topic:** `{req['topic_name']}`")
+                        st.markdown(f"🗓️ **Requested Date & Time:** {req['preferred_slot']}")
                         
-                        # Status Badges
-                        st.write(f"**Approval Status:** `{req['status']}` | **Training Status:** `{req['training_status']}`")
+                        st.write(f"**Approval Status:** `{req['status']}` | **Training Status:** `{req.get('training_status', 'Pending')}`")
                         if req['status'] == "Rejected" and req.get('rejection_reason'):
                             st.error(f"❌ **Rejection Reason:** {req['rejection_reason']}")
                     
                     with col_action:
-                        st.markdown("#### Manage Request")
+                        st.markdown("#### Action Panel")
                         action_choice = st.selectbox(
                             "Select Action",
-                            ["Select Status", "Accept Request", "Reject Request"],
+                            ["Select Action", "Accept Request", "Reject Request"],
                             key=f"act_sel_{req['id']}"
                         )
                         
@@ -225,7 +243,7 @@ if is_admin_view:
                                 index=["Pending", "In Progress", "Completed"].index(req.get('training_status', 'Pending')),
                                 key=f"tr_stat_{req['id']}"
                             )
-                            if st.button("Update to Accepted", key=f"btn_acc_{req['id']}"):
+                            if st.button("Confirm Accept", key=f"btn_acc_{req['id']}"):
                                 db.update_refresher_status(req['id'], status="Accepted", rejection_reason="", training_status=t_status)
                                 st.success("Request Accepted Successfully!")
                                 st.rerun()
@@ -234,7 +252,7 @@ if is_admin_view:
                             rejection_reason = st.text_area("Rejection Reason *", key=f"rej_reason_{req['id']}")
                             if st.button("Confirm Reject", key=f"btn_rej_{req['id']}"):
                                 if not rejection_reason.strip():
-                                    st.error("Please provide a rejection reason!")
+                                    st.error("Please enter a rejection reason!")
                                 else:
                                     db.update_refresher_status(req['id'], status="Rejected", rejection_reason=rejection_reason.strip(), training_status="Cancelled")
                                     st.warning("Request Marked as Rejected.")
@@ -252,60 +270,124 @@ else:
     ])
     
     with agent_tab1:
-        st.info("Select topics to study and participate in quizzes.")
+        if "agent_authenticated" not in st.session_state:
+            st.session_state.agent_authenticated = False
+            
+        if not st.session_state.agent_authenticated:
+            with st.form("agent_login_form"):
+                st.markdown("#### Agent Sign In")
+                ag_name = st.text_input("Full Name *")
+                ag_id = st.text_input("Employee ID *")
+                ag_chan = st.selectbox("Channel", ["", "Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
+                ag_topic = st.selectbox("Topic", ["", "Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
+                
+                login_submitted = st.form_submit_button("Access Portal")
+                
+                if login_submitted:
+                    if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip():
+                        st.error("⚠️ All fields (Name, Employee ID, Channel, and Topic) are required!")
+                    else:
+                        st.session_state.agent_name = ag_name.strip()
+                        st.session_state.agent_empid = ag_id.strip()
+                        st.session_state.agent_channel = ag_chan
+                        st.session_state.agent_topic = ag_topic
+                        st.session_state.agent_authenticated = True
+                        st.rerun()
+        else:
+            st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid})")
+            if st.button("Log Out"):
+                st.session_state.agent_authenticated = False
+                st.session_state.pop("selected_topic_id", None)
+                st.rerun()
+                
+            st.divider()
+            
+            all_topics = db.get_topics()
+            if not all_topics:
+                st.info("No training topics available in the portal right now.")
+            else:
+                if "selected_topic_id" not in st.session_state:
+                    st.markdown("### 🎯 Select a Training Topic Card")
+                    cols = st.columns(3)
+                    for idx, topic in enumerate(all_topics):
+                        col = cols[idx % 3]
+                        with col:
+                            st.markdown(f"""
+                            <div class="topic-card-box">
+                                <h3>📚 {topic['name']}</h3>
+                                <p style="color: #a0a0a0; margin-bottom: 5px;">⏱️ Duration: <b>{topic['duration']}</b></p>
+                                <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
+                                st.session_state.selected_topic_id = topic['id']
+                                st.rerun()
+                            st.write("")
+                else:
+                    selected_topic = next((t for t in all_topics if t["id"] == st.session_state.selected_topic_id), None)
+                    
+                    if selected_topic:
+                        if st.button("⬅️ Back to All Topics Card Grid"):
+                            st.session_state.pop("selected_topic_id", None)
+                            st.rerun()
+                        
+                        st.markdown(f"## 📖 Module: **{selected_topic['name']}**")
+                        st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
+                        
+                        site_url = selected_topic.get("site_url", "")
+                        if site_url:
+                            st.markdown(f"#### 🌐 Embedded Training Material")
+                            st.components.v1.iframe(site_url, height=650, scrolling=True)
+                        else:
+                            st.warning("No Netlify URL attached to this topic.")
 
-    # ----------------------------------------------------
-    # REFRESHER SESSION REQUEST FORM (AGENT VIEW)
-    # ----------------------------------------------------
+    # ====================================================
+    # REFRESHER SESSION REQUEST FORM (AGENT VIEW UPDATED)
+    # ====================================================
     with agent_tab2:
         st.subheader("🔁 Request a Refresher Training Session")
-        st.caption("Fill up all required details below to send a request to the Training/Admin Team.")
+        st.caption("All fields are mandatory (*). Fill in details and click request.")
         
-        db_topics = db.get_topics()
-        topic_names = [t['name'] for t in db_topics] if db_topics else []
+        all_topics = db.get_topics()
+        topic_options = [t["name"] for t in all_topics] if all_topics else []
         
-        with st.form("agent_refresher_request_form"):
+        with st.form("refresher_request_form_agent"):
             c1, c2 = st.columns(2)
-            ag_name = c1.text_input("Agent Name *", placeholder="Enter your full name")
-            ag_id = c2.text_input("EMP ID *", placeholder="e.g. PX-1024")
+            ag_name = c1.text_input("Agent Name *", placeholder="Enter Agent Full Name")
+            ag_id = c2.text_input("EMP ID *", placeholder="Enter EMP ID")
             
             c3, c4 = st.columns(2)
-            ag_channel = c3.selectbox(
+            ag_chan = c3.selectbox(
                 "Channel *", 
                 ["", "Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
             )
             
-            # Dynamic Topic Selection
-            if topic_names:
-                ag_topic = c4.selectbox("Topic Name *", [""] + topic_names)
+            if topic_options:
+                ag_topic = c4.selectbox("Topic Name *", [""] + topic_options)
             else:
-                ag_topic = c4.text_input("Topic Name *", placeholder="Enter topic name needed")
+                ag_topic = c4.text_input("Topic Name *", placeholder="Enter required topic name")
                 
-            st.markdown("#### 📅 Desired Timeframe / Date Range *")
+            st.markdown("#### 📅 Select Desired Training Date & Time Range *")
             col_d1, col_d2 = st.columns(2)
-            start_date = col_d1.date_input("Training Needed From *", value=date.today())
-            end_date = col_d2.date_input("Training Needed Until *", value=date.today())
+            req_date = col_d1.date_input("Training Date Needed *", value=date.today())
+            req_time = col_d2.selectbox("Preferred Time Slot *", ["", "10:00 AM - 01:00 PM", "02:00 PM - 05:00 PM", "05:00 PM - 08:00 PM"])
             
-            preferred_slot = st.selectbox("Preferred Time Slot *", ["", "Morning (10:00 AM - 01:00 PM)", "Afternoon (02:00 PM - 05:00 PM)", "Evening (05:00 PM - 08:00 PM)"])
+            submit_refresher = st.form_submit_button("Request Refresher Training session")
             
-            submit_btn = st.form_submit_button("Request Refresher Training Session")
-            
-            if submit_btn:
-                # Validation for required fields
-                if not ag_name.strip() or not ag_id.strip() or not ag_channel or not ag_topic or not preferred_slot:
+            if submit_refresher:
+                # Validation checks for all required fields
+                if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip() or not req_time.strip():
                     st.error("⚠️ All fields marked with (*) are required!")
-                elif start_date > end_date:
-                    st.error("⚠️ Start Date cannot be after End Date!")
                 else:
-                    time_frame_str = f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')} ({preferred_slot})"
+                    slot_formatted = f"{req_date.strftime('%d %b %Y')} ({req_time})"
                     
-                    req_payload = {
+                    db.insert_refresher_request({
                         "id": str(uuid.uuid4()),
-                        "name": ag_name.strip(),
                         "empid": ag_id.strip(),
-                        "channel": ag_channel,
+                        "name": ag_name.strip(),
+                        "channel": ag_chan,
                         "topic_name": ag_topic,
-                        "time_frame": time_frame_str
-                    }
-                    db.insert_refresher_request(req_payload)
-                    st.success("✅ Refresher Training Session requested successfully! Admin will review your request.")
+                        "preferred_slot": slot_formatted
+                    })
+                    st.success("✅ Refresher Session request sent successfully to Admin!")
