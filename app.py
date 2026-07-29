@@ -3,9 +3,7 @@ import pandas as pd
 import json
 import uuid
 import base64
-import io
 from datetime import datetime, date
-from docx import Document  # python-docx for rendering docx content in portal
 
 import db
 
@@ -26,6 +24,7 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     color:#EAF2EE;
     border-radius:8px;
     font-family:'IBM Plex Mono', monospace;
+    width: 100%;
 }
 .stButton>button:hover {
     border-color:#FF7A45;
@@ -47,16 +46,34 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     border:1px solid #2A3A34;
     border-radius:14px;
 }
-.doc-viewer-box {
-    background-color: #0F1715;
+/* Topic Card Custom CSS */
+.topic-card-box {
+    background-color: #182420;
     border: 1px solid #2A3A34;
+    border-radius: 12px;
     padding: 20px;
+    transition: all 0.3s ease;
+    height: 100%;
+}
+.topic-card-box:hover {
+    border-color: #FF7A45;
+    box-shadow: 0 4px 15px rgba(255, 122, 69, 0.15);
+}
+.embed-container {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    overflow: hidden;
+    max-width: 100%;
     border-radius: 10px;
-    max-height: 500px;
-    overflow-y: auto;
-    color: #EAF2EE;
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
+    border: 1px solid #2A3A34;
+}
+.embed-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -91,27 +108,27 @@ st.title("Pathao Rides — CX Training Portal")
 
 if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3 = st.tabs([
-        "🗃️ Topic & Document Manager", 
+        "🗃️ Topic & Web Link Manager", 
         "📅 Induction Training", 
         "🔁 Refresher Training"
     ])
     
     # ==========================================
-    # 1. CENTRAL TOPIC & DOCUMENT MANAGER
+    # 1. CENTRAL TOPIC & LINK MANAGER (UPDATED)
     # ==========================================
     with admin_tab1:
-        st.header("Topic & Document Management System")
-        st.caption("Upload document files (PDF/DOCX) and setup 5-question Quiz for agents.")
+        st.header("Topic & Web Content Management System")
+        st.caption("Add Netlify Website Links for training topics and setup 5-question Quiz for agents.")
         
-        with st.expander("➕ Add New Training Topic & Document", expanded=False):
+        with st.expander("➕ Add New Training Topic & Netlify Link", expanded=False):
             with st.form("new_topic_form"):
                 c1, c2, c3 = st.columns([2, 1, 1])
                 t_name = c1.text_input("Topic Name * (e.g., Refund Policy, Fare Anomaly)")
                 t_duration = c2.text_input("Duration * (e.g., 30 mins, 1 hour)")
                 t_trainer = c3.text_input("Assigned Trainer Name")
                 
-                st.markdown("#### 📄 Upload Training Document (PDF / DOCX * Required)")
-                uploaded_doc = st.file_uploader("Upload PDF or Word (DOCX) Document", type=["pdf", "docx"])
+                st.markdown("#### 🔗 Add Training Material Netlify Link *")
+                site_url = st.text_input("Netlify Site URL * (e.g., https://your-site.netlify.app)")
                 
                 st.divider()
                 st.markdown("#### 📝 Topic Quiz Setup (Add 5 Questions)")
@@ -141,11 +158,11 @@ if is_admin_view:
                     })
                     st.write("---")
                 
-                submit_topic = st.form_submit_button("💾 Save Topic & Document")
+                submit_topic = st.form_submit_button("💾 Save Topic & Link")
                 
                 if submit_topic:
-                    if not t_name or not t_duration or not uploaded_doc:
-                        st.error("Topic Name, Duration, and Document File (PDF/DOCX) are mandatory!")
+                    if not t_name or not t_duration or not site_url:
+                        st.error("Topic Name, Duration, and Netlify URL are mandatory!")
                     else:
                         valid_quiz = [q for q in quiz_inputs if q["question"].strip() != ""]
                         
@@ -156,12 +173,10 @@ if is_admin_view:
                             "trainer_name": t_trainer.strip(),
                             "quiz_passing_mark": int(passing_mark),
                             "quiz_questions": json.dumps(valid_quiz),
-                            "file_name": uploaded_doc.name,
-                            "file_type": uploaded_doc.type,
-                            "file_data": uploaded_doc.getvalue()
+                            "site_url": site_url.strip() # Saved netlify link
                         }
                         db.upsert_topic(topic_payload)
-                        st.success(f"Topic '{t_name}' saved with document and quiz!")
+                        st.success(f"Topic '{t_name}' saved with Netlify link!")
                         st.rerun()
 
         st.subheader("Current Topics in Database")
@@ -172,9 +187,8 @@ if is_admin_view:
             for top in current_topics:
                 with st.container(border=True):
                     col_t1, col_t2 = st.columns([4, 1])
-                    col_t1.markdown(f"### 📄 {top.get('name', 'Unnamed Topic')}")
-                    file_attached = top.get('file_name') or 'None'
-                    col_t1.caption(f"⏱️ Duration: {top.get('duration', '')} | 👤 Trainer: {top.get('trainer_name') or 'Unassigned'} | 📁 Document: {file_attached}")
+                    col_t1.markdown(f"### 🌐 {top.get('name', 'Unnamed Topic')}")
+                    col_t1.caption(f"⏱️ Duration: {top.get('duration', '')} | 👤 Trainer: {top.get('trainer_name') or 'Unassigned'} | 🔗 URL: {top.get('site_url', 'N/A')}")
                     
                     with col_t2:
                         if st.button("🗑️ Delete", key=f"del_{top['id']}"):
@@ -341,7 +355,7 @@ if is_admin_view:
 
 else:
     # ==========================================
-    # AGENT WORKSPACE PORTAL
+    # AGENT WORKSPACE PORTAL (CARD VIEW UPDATED)
     # ==========================================
     st.header("Agent Self-Service Hub")
     
@@ -374,6 +388,7 @@ else:
             st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid})")
             if st.button("Log Out"):
                 st.session_state.agent_authenticated = False
+                st.session_state.pop("selected_topic_id", None)
                 st.rerun()
                 
             st.divider()
@@ -382,92 +397,99 @@ else:
             if not all_topics:
                 st.info("No training topics available in the portal right now.")
             else:
-                topic_options = {t["name"]: t for t in all_topics}
-                selected_topic_name = st.selectbox("Select Study Topic *", list(topic_options.keys()))
-                selected_topic = topic_options[selected_topic_name]
-                
-                st.markdown(f"### Topic: **{selected_topic['name']}**")
-                st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
-                
-                # DIRECT PORTAL DOCUMENT VIEWER
-                if selected_topic.get("file_name") and selected_topic.get("file_data"):
-                    file_bytes = selected_topic["file_data"]
-                    file_name = selected_topic["file_name"].lower()
+                # ----------------------------------------------------
+                # TOPIC CARDS GRID SYSTEM
+                # ----------------------------------------------------
+                if "selected_topic_id" not in st.session_state:
+                    st.markdown("### 🎯 Select a Training Topic Card")
                     
-                    st.markdown(f"#### 📄 Reading Material: `{selected_topic['file_name']}`")
-                    
-                    # 1. PDF Direct Embedded View
-                    if file_name.endswith(".pdf"):
-                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="650" type="application/pdf"></iframe>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
-                    
-                    # 2. DOCX Direct Reading View (Extracted & Rendered inside Portal)
-                    elif file_name.endswith(".docx"):
-                        try:
-                            doc_io = io.BytesIO(file_bytes)
-                            document = Document(doc_io)
+                    # Creating a 3-Column Grid for Cards
+                    cols = st.columns(3)
+                    for idx, topic in enumerate(all_topics):
+                        col = cols[idx % 3]
+                        with col:
+                            st.markdown(f"""
+                            <div class="topic-card-box">
+                                <h3>📚 {topic['name']}</h3>
+                                <p style="color: #a0a0a0; margin-bottom: 5px;">⏱️ Duration: <b>{topic['duration']}</b></p>
+                                <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
+                            </div>
+                            """, unsafe_allow_html=True)
                             
-                            doc_html = "<div class='doc-viewer-box'>"
-                            for p in document.paragraphs:
-                                if p.text.strip():
-                                    doc_html += f"<p>{p.text}</p>"
-                            doc_html += "</div>"
-                            
-                            st.markdown(doc_html, unsafe_allow_html=True)
-                        except Exception as e:
-                            st.warning("Could not convert DOCX directly into HTML view. Use option below:")
-                            st.download_button(
-                                label="Download Document File",
-                                data=file_bytes,
-                                file_name=selected_topic["file_name"]
-                            )
-                st.divider()
+                            if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
+                                st.session_state.selected_topic_id = topic['id']
+                                st.rerun()
+                            st.write("")
                 
-                # 5-QUESTION QUIZ ENGINE
-                st.markdown("### 📝 Topic Quiz Assessment")
-                try:
-                    quiz_data = json.loads(selected_topic.get("quiz_questions", "[]"))
-                except Exception:
-                    quiz_data = []
-                    
-                if not quiz_data:
-                    st.info("No quiz has been created for this topic yet.")
+                # ----------------------------------------------------
+                # SELECTED TOPIC VIEW (WEBVIEW EMBED + QUIZ)
+                # ----------------------------------------------------
                 else:
-                    st.write(f"Answer the questions below to complete this topic (Passing mark: {selected_topic.get('quiz_passing_mark', 80)}%):")
+                    selected_topic = next((t for t in all_topics if t["id"] == st.session_state.selected_topic_id), None)
                     
-                    user_answers = {}
-                    for idx, question in enumerate(quiz_data):
-                        st.markdown(f"**Q{idx+1}. {question['question']}**")
-                        user_answers[idx] = st.radio(
-                            "Select Your Option:", 
-                            [opt for opt in question["options"] if opt.strip() != ""], 
-                            key=f"q_{selected_topic['id']}_{idx}"
-                        )
-                        st.write("")
-                    
-                    if st.button("Submit Quiz Answers"):
-                        correct_count = 0
-                        for idx, question in enumerate(quiz_data):
-                            if user_answers.get(idx) == question["answer"]:
-                                correct_count += 1
-                                
-                        score_percentage = int((correct_count / len(quiz_data)) * 100)
-                        passing_score = selected_topic.get("quiz_passing_mark", 80)
+                    if selected_topic:
+                        if st.button("⬅️ Back to All Topics Card Grid"):
+                            st.session_state.pop("selected_topic_id", None)
+                            st.rerun()
                         
-                        if score_percentage >= passing_score:
-                            st.balloons()
-                            st.success(f"🎉 Passed! Your Score: {score_percentage}% (Correct: {correct_count}/{len(quiz_data)})")
-                            db.insert_self_training_score(
-                                empid=st.session_state.agent_empid,
-                                name=st.session_state.agent_name,
-                                topic_id=selected_topic["id"],
-                                topic_name=selected_topic["name"],
-                                score=score_percentage,
-                                status="Passed"
-                            )
+                        st.markdown(f"## 📖 Module: **{selected_topic['name']}**")
+                        st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
+                        
+                        # Netlify Website Embed View
+                        site_url = selected_topic.get("site_url", "")
+                        if site_url:
+                            st.markdown(f"#### 🌐 Embedded Training Material")
+                            st.components.v1.iframe(site_url, height=650, scrolling=True)
+                            st.markdown(f"🔗 *Having trouble viewing? [Click here to open in new tab]({site_url})*")
                         else:
-                            st.error(f"❌ Failed. Your Score: {score_percentage}%. Please review the document and try again.")
+                            st.warning("No Netlify URL attached to this topic.")
+                        
+                        st.divider()
+                        
+                        # 5-QUESTION QUIZ ENGINE
+                        st.markdown("### 📝 Topic Quiz Assessment")
+                        try:
+                            quiz_data = json.loads(selected_topic.get("quiz_questions", "[]"))
+                        except Exception:
+                            quiz_data = []
+                            
+                        if not quiz_data:
+                            st.info("No quiz has been created for this topic yet.")
+                        else:
+                            st.write(f"Answer the questions below to complete this topic (Passing mark: {selected_topic.get('quiz_passing_mark', 80)}%):")
+                            
+                            user_answers = {}
+                            for idx, question in enumerate(quiz_data):
+                                st.markdown(f"**Q{idx+1}. {question['question']}**")
+                                user_answers[idx] = st.radio(
+                                    "Select Your Option:", 
+                                    [opt for opt in question["options"] if opt.strip() != ""], 
+                                    key=f"q_{selected_topic['id']}_{idx}"
+                                )
+                                st.write("")
+                            
+                            if st.button("Submit Quiz Answers"):
+                                correct_count = 0
+                                for idx, question in enumerate(quiz_data):
+                                    if user_answers.get(idx) == question["answer"]:
+                                        correct_count += 1
+                                        
+                                score_percentage = int((correct_count / len(quiz_data)) * 100)
+                                passing_score = selected_topic.get("quiz_passing_mark", 80)
+                                
+                                if score_percentage >= passing_score:
+                                    st.balloons()
+                                    st.success(f"🎉 Passed! Your Score: {score_percentage}% (Correct: {correct_count}/{len(quiz_data)})")
+                                    db.insert_self_training_score(
+                                        empid=st.session_state.agent_empid,
+                                        name=st.session_state.agent_name,
+                                        topic_id=selected_topic["id"],
+                                        topic_name=selected_topic["name"],
+                                        score=score_percentage,
+                                        status="Passed"
+                                    )
+                                else:
+                                    st.error(f"❌ Failed. Your Score: {score_percentage}%. Please review the topic material and try again.")
 
     with agent_tab2:
         st.subheader("Request Refresher Session")
