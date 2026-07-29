@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import json
 import uuid
-import base64
 from datetime import datetime, date
 
 import db
@@ -46,7 +45,6 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     border:1px solid #2A3A34;
     border-radius:14px;
 }
-/* Topic Card Custom CSS */
 .topic-card-box {
     background-color: #182420;
     border: 1px solid #2A3A34;
@@ -59,21 +57,12 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     border-color: #FF7A45;
     box-shadow: 0 4px 15px rgba(255, 122, 69, 0.15);
 }
-.embed-container {
-    position: relative;
-    padding-bottom: 56.25%;
-    height: 0;
-    overflow: hidden;
-    max-width: 100%;
-    border-radius: 10px;
+.metric-card {
+    background-color: #182420;
     border: 1px solid #2A3A34;
-}
-.embed-container iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -109,13 +98,11 @@ st.title("Pathao Rides — CX Training Portal")
 if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3 = st.tabs([
         "🗃️ Topic & Web Link Manager", 
-        "📅 Induction Training", 
+        "📅 Induction Performance Dashboard", 
         "🔁 Refresher Training"
     ])
     
-    # ==========================================
-    # 1. CENTRAL TOPIC & LINK MANAGER
-    # ==========================================
+    # 1. TOPIC MANAGER
     with admin_tab1:
         st.header("Topic & Web Content Management System")
         st.caption("Add Netlify Website Links for training topics and setup 5-question Quiz for agents.")
@@ -123,15 +110,13 @@ if is_admin_view:
         with st.expander("➕ Add New Training Topic & Netlify Link", expanded=False):
             with st.form("new_topic_form"):
                 c1, c2, c3 = st.columns([2, 1, 1])
-                t_name = c1.text_input("Topic Name * (e.g., Refund Policy, Fare Anomaly)")
-                t_duration = c2.text_input("Duration * (e.g., 30 mins, 1 hour)")
+                t_name = c1.text_input("Topic Name *")
+                t_duration = c2.text_input("Duration *")
                 t_trainer = c3.text_input("Assigned Trainer Name")
-                
-                st.markdown("#### 🔗 Add Training Material Netlify Link *")
-                site_url = st.text_input("Netlify Site URL * (e.g., https://your-site.netlify.app)")
+                site_url = st.text_input("Netlify Site URL *")
                 
                 st.divider()
-                st.markdown("#### 📝 Topic Quiz Setup (Add 5 Questions)")
+                st.markdown("#### 📝 Topic Quiz Setup")
                 passing_mark = st.number_input("Passing Score (%)", min_value=0, max_value=100, value=80)
                 
                 quiz_inputs = []
@@ -143,251 +128,173 @@ if is_admin_view:
                     opt_b = col_opt2.text_input(f"Option B (Q{q_num})", key=f"q_{q_num}_b")
                     opt_c = col_opt1.text_input(f"Option C (Q{q_num})", key=f"q_{q_num}_c")
                     opt_d = col_opt2.text_input(f"Option D (Q{q_num})", key=f"q_{q_num}_d")
-                    
-                    correct_opt = st.selectbox(
-                        f"Select Correct Answer for Q{q_num}", 
-                        ["Option A", "Option B", "Option C", "Option D"], 
-                        key=f"q_{q_num}_ans"
-                    )
+                    correct_opt = st.selectbox(f"Correct Answer Q{q_num}", ["Option A", "Option B", "Option C", "Option D"], key=f"q_{q_num}_ans")
                     
                     options_dict = {"Option A": opt_a, "Option B": opt_b, "Option C": opt_c, "Option D": opt_d}
-                    quiz_inputs.append({
-                        "question": q_text,
-                        "options": [opt_a, opt_b, opt_c, opt_d],
-                        "answer": options_dict[correct_opt]
-                    })
-                    st.write("---")
+                    quiz_inputs.append({"question": q_text, "options": [opt_a, opt_b, opt_c, opt_d], "answer": options_dict[correct_opt]})
                 
-                submit_topic = st.form_submit_button("💾 Save Topic & Link")
-                
-                if submit_topic:
-                    if not t_name or not t_duration or not site_url:
-                        st.error("Topic Name, Duration, and Netlify URL are mandatory!")
+                if st.form_submit_button("💾 Save Topic"):
+                    if not t_name or not site_url:
+                        st.error("Topic Name and URL required!")
                     else:
-                        valid_quiz = [q for q in quiz_inputs if q["question"].strip() != ""]
-                        
-                        topic_payload = {
-                            "id": str(uuid.uuid4()),
-                            "name": t_name.strip(),
-                            "duration": t_duration.strip(),
-                            "trainer_name": t_trainer.strip(),
-                            "quiz_passing_mark": int(passing_mark),
-                            "quiz_questions": json.dumps(valid_quiz),
-                            "site_url": site_url.strip()
-                        }
-                        db.upsert_topic(topic_payload)
-                        st.success(f"Topic '{t_name}' saved with Netlify link!")
+                        db.upsert_topic({
+                            "id": str(uuid.uuid4()), "name": t_name.strip(), "duration": t_duration.strip(),
+                            "trainer_name": t_trainer.strip(), "quiz_passing_mark": int(passing_mark),
+                            "quiz_questions": json.dumps(quiz_inputs), "site_url": site_url.strip()
+                        })
+                        st.success("Topic Saved!")
                         st.rerun()
 
-        st.subheader("Current Topics in Database")
-        current_topics = db.get_topics()
-        if not current_topics:
-            st.info("No records present inside Database yet.")
-        else:
-            for top in current_topics:
-                with st.container(border=True):
-                    col_t1, col_t2 = st.columns([4, 1])
-                    col_t1.markdown(f"### 🌐 {top.get('name', 'Unnamed Topic')}")
-                    col_t1.caption(f"⏱️ Duration: {top.get('duration', '')} | 👤 Trainer: {top.get('trainer_name') or 'Unassigned'} | 🔗 URL: {top.get('site_url', 'N/A')}")
-                    
-                    with col_t2:
-                        if st.button("🗑️ Delete", key=f"del_{top['id']}"):
-                            db.delete_topic(top['id'])
-                            st.warning("Topic deleted.")
-                            st.rerun()
+        st.subheader("Current Topics")
+        for top in db.get_topics():
+            with st.container(border=True):
+                col_t1, col_t2 = st.columns([4, 1])
+                col_t1.markdown(f"### 🌐 {top.get('name')}")
+                col_t1.caption(f"Duration: {top.get('duration')} | Trainer: {top.get('trainer_name')} | URL: {top.get('site_url')}")
+                if col_t2.button("🗑️ Delete", key=f"del_{top['id']}"):
+                    db.delete_topic(top['id'])
+                    st.rerun()
 
     # ==========================================
-    # 2. INDUCTION TRAINING
+    # 2. INDUCTION PERFORMANCE DASHBOARD (NEW)
     # ==========================================
     with admin_tab2:
-        st.header("Induction Training Dashboard")
-        st.info("Induction Training Active.")
+        st.header("📊 Induction Training Performance & Health Check")
+        st.caption("Track training progress, hours invested, and agent health status.")
+        
+        raw_data = db.get_induction_activities()
+        if not raw_data:
+            st.info("No Induction Activity Records Found.")
+        else:
+            df = pd.DataFrame(raw_data)
+            
+            # --- High Level Metrics Summary ---
+            m1, m2, m3, m4 = st.columns(4)
+            total_hours = df['hours_spent'].sum()
+            avg_score = df['quiz_score'].mean()
+            passed_agents = len(df[df['status'] == 'Passed']['agent_id'].unique())
+            total_agents = len(df['agent_id'].unique())
+            
+            m1.metric("⏱️ Total Training Hours", f"{total_hours:.1f} hrs")
+            m2.metric("🎯 Avg Quiz Score", f"{avg_score:.1f}%")
+            m3.metric("✅ Passed Agents", f"{passed_agents} / {total_agents}")
+            m4.metric("📈 Pass Rate", f"{(passed_agents/total_agents)*100:.1f}%" if total_agents else "0%")
+            
+            st.divider()
+            
+            col_left, col_right = st.columns([1, 1])
+            
+            # 1. Topic-wise Hours Calculation
+            with col_left:
+                st.subheader("⏱️ Topic-wise Training Hours")
+                topic_hours = df.groupby('topic_name')['hours_spent'].sum().reset_index()
+                topic_hours.columns = ['Topic Name', 'Total Hours']
+                st.dataframe(topic_hours, use_container_width=True, hide_index=True)
+                st.bar_chart(topic_hours.set_index('Topic Name'))
+                
+            # 2. Agent Health Check Dashboard
+            with col_right:
+                st.subheader("🩺 Agent Activity & Health Status")
+                
+                # Health Logic: Avg Score > 75 = Healthy🟢, 50-75 = Needs Attention🟡, < 50 = At Risk🔴
+                agent_health = df.groupby(['agent_id', 'agent_name']).agg(
+                    Avg_Score=('quiz_score', 'mean'),
+                    Total_Hours=('hours_spent', 'sum'),
+                    Attempts=('id', 'count')
+                ).reset_index()
+                
+                def get_health_status(score):
+                    if score >= 75:
+                        return "🟢 Healthy"
+                    elif score >= 50:
+                        return "🟡 Needs Improvement"
+                    else:
+                        return "🔴 At Risk"
+                
+                agent_health['Health Status'] = agent_health['Avg_Score'].apply(get_health_status)
+                
+                st.dataframe(
+                    agent_health[['agent_name', 'Total_Hours', 'Avg_Score', 'Health Status']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+            st.divider()
+            st.subheader("📋 Detailed Activity Logs")
+            st.dataframe(df[['activity_date', 'agent_name', 'channel', 'topic_name', 'hours_spent', 'quiz_score', 'status']], use_container_width=True)
 
-    # ==========================================
-    # 3. REFRESHER TRAINING (ADMIN VIEW UPDATED)
-    # ==========================================
+    # 3. REFRESHER TRAINING MANAGEMENT
     with admin_tab3:
         st.header("🔁 Refresher Training Requests Management")
-        st.caption("Review requests sent by agents and update approval/training status.")
-        
         all_requests = db.get_refresher_requests()
-        
         if not all_requests:
-            st.info("No Refresher Training Requests found in system.")
+            st.info("No Refresher Requests found.")
         else:
             for req in all_requests:
                 with st.container(border=True):
-                    col_info, col_action = st.columns([3, 2])
-                    
-                    with col_info:
-                        st.markdown(f"### 👤 Agent: **{req['name']}** (EMP ID: `{req['empid']}`)")
+                    c_info, c_action = st.columns([3, 2])
+                    with c_info:
+                        st.markdown(f"### 👤 Agent: **{req['name']}** (`{req['empid']}`)")
                         st.markdown(f"**Channel:** {req['channel']} | **Topic:** `{req['topic_name']}`")
-                        st.markdown(f"🗓️ **Requested Date & Time:** {req['preferred_slot']}")
-                        
-                        st.write(f"**Approval Status:** `{req['status']}` | **Training Status:** `{req.get('training_status', 'Pending')}`")
-                        if req['status'] == "Rejected" and req.get('rejection_reason'):
-                            st.error(f"❌ **Rejection Reason:** {req['rejection_reason']}")
+                        st.markdown(f"🗓️ Slot: {req['preferred_slot']}")
+                        st.write(f"**Status:** `{req['status']}` | **Training:** `{req.get('training_status', 'Pending')}`")
                     
-                    with col_action:
-                        st.markdown("#### Action Panel")
-                        action_choice = st.selectbox(
-                            "Select Action",
-                            ["Select Action", "Accept Request", "Reject Request"],
-                            key=f"act_sel_{req['id']}"
-                        )
-                        
-                        if action_choice == "Accept Request":
-                            t_status = st.selectbox(
-                                "Set Training Status",
-                                ["Pending", "In Progress", "Completed"],
-                                index=["Pending", "In Progress", "Completed"].index(req.get('training_status', 'Pending')),
-                                key=f"tr_stat_{req['id']}"
-                            )
-                            if st.button("Confirm Accept", key=f"btn_acc_{req['id']}"):
-                                db.update_refresher_status(req['id'], status="Accepted", rejection_reason="", training_status=t_status)
-                                st.success("Request Accepted Successfully!")
+                    with c_action:
+                        action = st.selectbox("Action", ["Select Action", "Accept Request", "Reject Request"], key=f"act_{req['id']}")
+                        if action == "Accept Request":
+                            t_stat = st.selectbox("Training Status", ["Pending", "In Progress", "Completed"], key=f"ts_{req['id']}")
+                            if st.button("Confirm Accept", key=f"acc_{req['id']}"):
+                                db.update_refresher_status(req['id'], "Accepted", "", t_stat)
                                 st.rerun()
-                                
-                        elif action_choice == "Reject Request":
-                            rejection_reason = st.text_area("Rejection Reason *", key=f"rej_reason_{req['id']}")
-                            if st.button("Confirm Reject", key=f"btn_rej_{req['id']}"):
-                                if not rejection_reason.strip():
-                                    st.error("Please enter a rejection reason!")
-                                else:
-                                    db.update_refresher_status(req['id'], status="Rejected", rejection_reason=rejection_reason.strip(), training_status="Cancelled")
-                                    st.warning("Request Marked as Rejected.")
+                        elif action == "Reject Request":
+                            reason = st.text_area("Reason *", key=f"rej_{req['id']}")
+                            if st.button("Confirm Reject", key=f"rej_btn_{req['id']}"):
+                                if reason.strip():
+                                    db.update_refresher_status(req['id'], "Rejected", reason.strip(), "Cancelled")
                                     st.rerun()
 
 else:
-    # ==========================================
-    # AGENT WORKSPACE PORTAL
-    # ==========================================
+    # AGENT VIEW
     st.header("Agent Self-Service Hub")
-    
-    agent_tab1, agent_tab2 = st.tabs([
-        "📖 Study Topics & Take Quiz", 
-        "🔁 Request Refresher Session"
-    ])
+    agent_tab1, agent_tab2 = st.tabs(["📖 Study Topics & Take Quiz", "🔁 Request Refresher Session"])
     
     with agent_tab1:
-        if "agent_authenticated" not in st.session_state:
-            st.session_state.agent_authenticated = False
-            
-        if not st.session_state.agent_authenticated:
-            with st.form("agent_login_form"):
-                st.markdown("#### Agent Sign In")
-                ag_name = st.text_input("Full Name *")
-                ag_id = st.text_input("Employee ID *")
-                ag_chan = st.selectbox("Channel", ["", "Inbound", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"])
-                ag_topic = st.selectbox("Topic", ["", "Rider Joining Process", "Joining Bonus & Referral Program", "Star Program", "Fare Information", "Due & Payment", "Flagged Trips", "Payment Flow", "SOPs & Internal Tools", "Parcel Service"])
-                
-                login_submitted = st.form_submit_button("Access Portal")
-                
-                if login_submitted:
-                    if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip():
-                        st.error("⚠️ All fields (Name, Employee ID, Channel, and Topic) are required!")
-                    else:
-                        st.session_state.agent_name = ag_name.strip()
-                        st.session_state.agent_empid = ag_id.strip()
-                        st.session_state.agent_channel = ag_chan
-                        st.session_state.agent_topic = ag_topic
-                        st.session_state.agent_authenticated = True
-                        st.rerun()
+        topics = db.get_topics()
+        if not topics:
+            st.info("No topics available.")
         else:
-            st.success(f"Active Session: **{st.session_state.agent_name}** ({st.session_state.agent_empid})")
-            if st.button("Log Out"):
-                st.session_state.agent_authenticated = False
-                st.session_state.pop("selected_topic_id", None)
-                st.rerun()
-                
-            st.divider()
-            
-            all_topics = db.get_topics()
-            if not all_topics:
-                st.info("No training topics available in the portal right now.")
-            else:
-                if "selected_topic_id" not in st.session_state:
-                    st.markdown("### 🎯 Select a Training Topic Card")
-                    cols = st.columns(3)
-                    for idx, topic in enumerate(all_topics):
-                        col = cols[idx % 3]
-                        with col:
-                            st.markdown(f"""
-                            <div class="topic-card-box">
-                                <h3>📚 {topic['name']}</h3>
-                                <p style="color: #a0a0a0; margin-bottom: 5px;">⏱️ Duration: <b>{topic['duration']}</b></p>
-                                <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
-                                st.session_state.selected_topic_id = topic['id']
-                                st.rerun()
-                            st.write("")
-                else:
-                    selected_topic = next((t for t in all_topics if t["id"] == st.session_state.selected_topic_id), None)
-                    
-                    if selected_topic:
-                        if st.button("⬅️ Back to All Topics Card Grid"):
-                            st.session_state.pop("selected_topic_id", None)
-                            st.rerun()
-                        
-                        st.markdown(f"## 📖 Module: **{selected_topic['name']}**")
-                        st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
-                        
-                        site_url = selected_topic.get("site_url", "")
-                        if site_url:
-                            st.markdown(f"#### 🌐 Embedded Training Material")
-                            st.components.v1.iframe(site_url, height=650, scrolling=True)
-                        else:
-                            st.warning("No Netlify URL attached to this topic.")
+            for t in topics:
+                with st.container(border=True):
+                    st.markdown(f"### 📚 {t['name']}")
+                    st.caption(f"Duration: {t['duration']} | Trainer: {t.get('trainer_name', 'N/A')}")
+                    if t.get('site_url'):
+                        st.components.v1.iframe(t['site_url'], height=450, scrolling=True)
 
-    # ====================================================
-    # REFRESHER SESSION REQUEST FORM (AGENT VIEW UPDATED)
-    # ====================================================
     with agent_tab2:
-        st.subheader("🔁 Request a Refresher Training Session")
-        st.caption("All fields are mandatory (*). Fill in details and click request.")
+        st.subheader("🔁 Request Refresher Session")
+        topics = db.get_topics()
+        t_opts = [t["name"] for t in topics] if topics else []
         
-        all_topics = db.get_topics()
-        topic_options = [t["name"] for t in all_topics] if all_topics else []
-        
-        with st.form("refresher_request_form_agent"):
+        with st.form("agent_ref_form"):
             c1, c2 = st.columns(2)
-            ag_name = c1.text_input("Agent Name *", placeholder="Enter Agent Full Name")
-            ag_id = c2.text_input("EMP ID *", placeholder="Enter EMP ID")
+            a_name = c1.text_input("Agent Name *")
+            a_id = c2.text_input("EMP ID *")
             
             c3, c4 = st.columns(2)
-            ag_chan = c3.selectbox(
-                "Channel *", 
-                ["", "Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
-            )
+            a_chan = c3.selectbox("Channel *", ["", "Inbound Voice", "Live Chat", "Email", "Complaint"])
+            a_topic = c4.selectbox("Topic *", [""] + t_opts) if t_opts else c4.text_input("Topic Name *")
             
-            if topic_options:
-                ag_topic = c4.selectbox("Topic Name *", [""] + topic_options)
-            else:
-                ag_topic = c4.text_input("Topic Name *", placeholder="Enter required topic name")
-                
-            st.markdown("#### 📅 Select Desired Training Date & Time Range *")
-            col_d1, col_d2 = st.columns(2)
-            req_date = col_d1.date_input("Training Date Needed *", value=date.today())
-            req_time = col_d2.selectbox("Preferred Time Slot *", ["", "10:00 AM - 01:00 PM", "02:00 PM - 05:00 PM", "05:00 PM - 08:00 PM"])
+            col1, col2 = st.columns(2)
+            r_date = col1.date_input("Date *", value=date.today())
+            r_time = col2.selectbox("Slot *", ["", "10:00 AM - 01:00 PM", "02:00 PM - 05:00 PM"])
             
-            submit_refresher = st.form_submit_button("Request Refresher Training session")
-            
-            if submit_refresher:
-                # Validation checks for all required fields
-                if not ag_name.strip() or not ag_id.strip() or not ag_chan.strip() or not ag_topic.strip() or not req_time.strip():
-                    st.error("⚠️ All fields marked with (*) are required!")
+            if st.form_submit_button("Submit Request"):
+                if not a_name or not a_id or not a_chan or not a_topic or not r_time:
+                    st.error("All fields mandatory!")
                 else:
-                    slot_formatted = f"{req_date.strftime('%d %b %Y')} ({req_time})"
-                    
                     db.insert_refresher_request({
-                        "id": str(uuid.uuid4()),
-                        "empid": ag_id.strip(),
-                        "name": ag_name.strip(),
-                        "channel": ag_chan,
-                        "topic_name": ag_topic,
-                        "preferred_slot": slot_formatted
+                        "id": str(uuid.uuid4()), "empid": a_id, "name": a_name,
+                        "channel": a_chan, "topic_name": a_topic,
+                        "preferred_slot": f"{r_date.strftime('%d %b %Y')} ({r_time})"
                     })
-                    st.success("✅ Refresher Session request sent successfully to Admin!")
+                    st.success("Request submitted successfully!")
