@@ -57,7 +57,7 @@ def init_db():
         start_date TEXT,
         end_date TEXT,
         schedule_json TEXT,
-        status TEXT DEFAULT 'Draft'
+        status TEXT DEFAULT 'In Progress'
     )
     """)
 
@@ -167,7 +167,7 @@ def delete_agent(empid):
     conn.close()
 
 # Batch Calendar Schedule Functions
-def save_batch_schedule(sched_id, batch_name, start_date, end_date, schedule_json, status="Published"):
+def save_batch_schedule(sched_id, batch_name, start_date, end_date, schedule_json, status="In Progress"):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -180,6 +180,24 @@ def save_batch_schedule(sched_id, batch_name, start_date, end_date, schedule_jso
             schedule_json=excluded.schedule_json,
             status=excluded.status
     """, (sched_id, batch_name, start_date, end_date, schedule_json, status))
+    conn.commit()
+    conn.close()
+
+def update_schedule_json_and_status(sched_id, schedule_json, status=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    if status:
+        cursor.execute("""
+            UPDATE batch_calendar_schedules 
+            SET schedule_json = ?, status = ?
+            WHERE id = ?
+        """, (schedule_json, status, sched_id))
+    else:
+        cursor.execute("""
+            UPDATE batch_calendar_schedules 
+            SET schedule_json = ?
+            WHERE id = ?
+        """, (schedule_json, sched_id))
     conn.commit()
     conn.close()
 
