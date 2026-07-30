@@ -12,16 +12,21 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # 1. Topics Table
+    # Drop existing table if column structure is outdated to prevent OperationalError
+    cursor.execute("PRAGMA table_info(topics)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if columns and "form_url" not in columns:
+        cursor.execute("DROP TABLE IF EXISTS topics")
+
+    # 1. Topics Table (Updated with slide_url and form_url)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS topics (
         id TEXT PRIMARY KEY,
         name TEXT,
         duration TEXT,
         trainer_name TEXT,
-        quiz_passing_mark INTEGER,
-        quiz_questions TEXT,
-        slide_url TEXT
+        slide_url TEXT,
+        form_url TEXT
     )
     """)
 
@@ -56,22 +61,22 @@ def init_db():
     )
     """)
 
-    # Default Topics Auto-Insertion (যদি টেবিল খালি থাকে)
+    # Default Topics Auto-Insertion
     cursor.execute("SELECT COUNT(*) FROM topics")
     if cursor.fetchone()[0] == 0:
         default_topics = [
-            ("top_1", "Fare Information", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed"),
-            ("top_2", "Joining Process", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed"),
-            ("top_3", "Star Program", "30 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1SbNxrXajQlZIpT6fvT_a9bXwmIhl1dQZh2olZ0s8lMI/embed"),
-            ("top_4", "Payment", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1Q9ous8zu6CmPe2Yw8oTKS-FkPKHUOHPT/embed"),
-            ("top_5", "User SOP", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1TCkGIRTbQ87ZmW8vZM4WS2nN237GzQWi/embed"),
-            ("top_6", "Rider SOP", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1A28xX9YdsEuHOIGEPfEigQ6C_azRmNap/embed"),
-            ("top_7", "QA Parameters", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1IT7U4N88rSaHSsbVPqY5K03kfKA3iddW98VT9lsPLVM/embed"),
-            ("top_8", "Pathao Internal Tools", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1UZQiOydwqm9etUb8MzEDXwGHbLipc30O/embed")
+            ("top_1", "Fare Information", "45 mins", "CMT Team", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed", ""),
+            ("top_2", "Joining Process", "60 mins", "CMT Team", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed", ""),
+            ("top_3", "Star Program", "30 mins", "CMT Team", "https://docs.google.com/presentation/d/1SbNxrXajQlZIpT6fvT_a9bXwmIhl1dQZh2olZ0s8lMI/embed", ""),
+            ("top_4", "Payment", "45 mins", "CMT Team", "https://docs.google.com/presentation/d/1Q9ous8zu6CmPe2Yw8oTKS-FkPKHUOHPT/embed", ""),
+            ("top_5", "User SOP", "60 mins", "CMT Team", "https://docs.google.com/presentation/d/1TCkGIRTbQ87ZmW8vZM4WS2nN237GzQWi/embed", ""),
+            ("top_6", "Rider SOP", "60 mins", "CMT Team", "https://docs.google.com/presentation/d/1A28xX9YdsEuHOIGEPfEigQ6C_azRmNap/embed", ""),
+            ("top_7", "QA Parameters", "45 mins", "CMT Team", "https://docs.google.com/presentation/d/1IT7U4N88rSaHSsbVPqY5K03kfKA3iddW98VT9lsPLVM/embed", ""),
+            ("top_8", "Pathao Internal Tools", "60 mins", "CMT Team", "https://docs.google.com/presentation/d/1UZQiOydwqm9etUb8MzEDXwGHbLipc30O/embed", "")
         ]
         cursor.executemany("""
-            INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, slide_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, default_topics)
 
     conn.commit()
@@ -81,16 +86,15 @@ def upsert_topic(data):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, slide_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             duration=excluded.duration,
             trainer_name=excluded.trainer_name,
-            quiz_passing_mark=excluded.quiz_passing_mark,
-            quiz_questions=excluded.quiz_questions,
-            slide_url=excluded.slide_url
-    """, (data['id'], data['name'], data['duration'], data['trainer_name'], data['quiz_passing_mark'], data['quiz_questions'], data['slide_url']))
+            slide_url=excluded.slide_url,
+            form_url=excluded.form_url
+    """, (data['id'], data['name'], data['duration'], data['trainer_name'], data['slide_url'], data['form_url']))
     conn.commit()
     conn.close()
 
