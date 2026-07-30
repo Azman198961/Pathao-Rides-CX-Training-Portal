@@ -12,12 +12,6 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Check and recreate topics table if needed for structure match
-    cursor.execute("PRAGMA table_info(topics)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if columns and "form_url" not in columns:
-        cursor.execute("DROP TABLE IF EXISTS topics")
-
     # 1. Topics Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS topics (
@@ -148,7 +142,6 @@ def upsert_agent(empid, name, email, phone):
             phone=excluded.phone
     """, (empid, name, email, phone))
     
-    # Initialize evaluation row if missing
     cursor.execute("""
         INSERT OR IGNORE INTO agent_evaluations (empid, agent_name)
         VALUES (?, ?)
