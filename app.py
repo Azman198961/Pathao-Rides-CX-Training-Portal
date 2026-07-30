@@ -13,51 +13,100 @@ from reportlab.lib import colors
 
 import db
 
-st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Custom Styling
+# Pathao Red & White Premium Theme Styling
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
 
+/* Global Font & Background */
+html, body, [data-testid="stAppViewContainer"] {
+    font-family: 'Inter', sans-serif;
+    background-color: #FAFAFA;
+    color: #212121;
+}
+
+/* Sidebar Styling */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF;
+    border-right: 1px solid #E0E0E0;
+}
+
+/* Typography & Headings */
 h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     font-family: 'Space Grotesk', sans-serif !important;
+    color: #111111;
 }
+
+/* Pathao Red Accent Buttons */
 .stButton>button {
-    background-color:#1F2E28;
-    border:1px solid #2A3A34;
-    color:#EAF2EE;
-    border-radius:8px;
-    font-family:'IBM Plex Mono', monospace;
+    background-color: #E1251B;
+    border: none;
+    color: #FFFFFF;
+    border-radius: 8px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
     width: 100%;
+    transition: all 0.2s ease;
+    padding: 10px 16px;
 }
 .stButton>button:hover {
-    border-color:#FF7A45;
-    color:#FF7A45;
+    background-color: #B81C14;
+    color: #FFFFFF;
+    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.25);
 }
-.stTabs [data-baseweb="tab-list"]{ gap:8px; }
-.stTabs [data-baseweb="tab"]{
-    background-color:#182420;
-    border:1px solid #2A3A34;
-    border-radius:10px;
-    padding:10px 20px;
+
+/* Tab Navigation */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    border-bottom: 2px solid #E0E0E0;
 }
-.stTabs [aria-selected="true"]{
-    border-color:#FF7A45 !important;
-    background-color:#1F2E28 !important;
+.stTabs [data-baseweb="tab"] {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px 8px 0px 0px;
+    padding: 10px 18px;
+    color: #555555;
 }
-[data-testid="stForm"], div[data-testid="stExpander"]{
-    background-color:#182420;
-    border:1px solid #2A3A34;
-    border-radius:14px;
+.stTabs [aria-selected="true"] {
+    border-color: #E1251B !important;
+    background-color: #E1251B !important;
 }
-.metric-box {
-    background-color: #182420;
-    border: 1px solid #2A3A34;
+.stTabs [aria-selected="true"] p {
+    color: #FFFFFF !important;
+}
+
+/* Form, Expander & Cards */
+[data-testid="stForm"], div[data-testid="stExpander"] {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
     border-radius: 12px;
-    padding: 15px;
+    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Custom Metric Cards */
+.metric-box {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-top: 4px solid #E1251B;
+    border-radius: 10px;
+    padding: 16px;
     text-align: center;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.03);
+}
+.metric-box h4 {
+    margin: 0;
+    font-size: 13px;
+    color: #666666;
+    text-transform: uppercase;
+}
+.metric-box h3 {
+    margin: 6px 0 0 0;
+    font-size: 22px;
+    color: #E1251B;
+    font-weight: 700;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -84,9 +133,9 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     story = []
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#FF7A45'), spaceAfter=10)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#E1251B'), spaceAfter=10)
     sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=15)
-    heading_style = ParagraphStyle('HeadStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1F2E28'), spaceAfter=8)
+    heading_style = ParagraphStyle('HeadStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#111111'), spaceAfter=8)
 
     story.append(Paragraph("Pathao Rides — Induction Performance Summary Report", title_style))
     if batch_info:
@@ -119,7 +168,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
         
         t = Table(table_data, colWidths=[55, 110, 45, 45, 45, 45, 45, 45, 65])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1F2E28')),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E1251B')),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -142,7 +191,7 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 with st.sidebar:
-    st.markdown("### 🎓 Pathao CX Portal")
+    st.markdown("<h2 style='color: #E1251B; margin-bottom: 0;'>🔴 Pathao CX</h2>", unsafe_allow_html=True)
     st.caption("Rides Department CMT")
     st.divider()
     role = st.radio("Access Level:", ["Agent View", "Admin View"])
@@ -150,7 +199,7 @@ with st.sidebar:
     if role == "Admin View" and not st.session_state.is_admin:
         pw = st.text_input("Enter Admin Password", type="password")
         if st.button("Authorize"):
-            if pw == st.secrets.get("admin_password", "123456"):
+            if pw == st.secrets.get("admin_password", "changeme123"):
                 st.session_state.is_admin = True
                 st.rerun()
             else:
@@ -168,13 +217,12 @@ st.title("Pathao Rides — CX Training Portal")
 CHANNEL_OPTIONS = ["Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
 
 if is_admin_view:
-    # 🆕 "Training Viewer" Tab Added Here
     admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "📈 Performance Dashboard",
         "📖 Self Training Logs",
         "👥 Agent Directory", 
         "📊 Topics & Quiz Editor", 
-        "🖥️ Training Viewer",  # <-- New Tab for Admin Live Presentations
+        "🖥️ Training Viewer", 
         "📅 Induction Calendar Planner", 
         "📝 Agent Evaluation", 
         "🔁 Refresher Requests"
@@ -308,7 +356,7 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
 
-    # 🆕 2.5 TRAINING VIEWER FOR ADMIN LIVE SESSIONS
+    # 2.5 TRAINING VIEWER FOR ADMIN LIVE SESSIONS
     with admin_tab_view:
         st.header("🖥️ Admin Training Presentation Viewer")
         st.caption("Select a topic directly to launch the presentation and quiz form during live training sessions.")
@@ -506,7 +554,7 @@ else:
     st.header("Agent Self-Service Hub")
     agent_tab1, agent_tab2 = st.tabs(["📖 Self Training", "🔁 Request Refresher Session"])
     
-    # 1. SELF TRAINING TAB (DYNAMIC FORM & AUTO-LOG)
+    # 1. SELF TRAINING TAB
     with agent_tab1:
         all_topics = db.get_topics()
         topic_names = [t["name"] for t in all_topics] if all_topics else []
@@ -530,11 +578,9 @@ else:
                     else:
                         selected_obj = next((t for t in all_topics if t["name"] == s_topic), None)
                         if selected_obj:
-                            # Auto save log to database
                             log_id = str(uuid.uuid4())
                             db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic)
                             
-                            # Set session state for display
                             st.session_state.active_self_topic = selected_obj
                             st.rerun()
         else:
