@@ -16,58 +16,64 @@ import db
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Pathao Red & Soft Off-White Theme Styling
+# Pathao Red & Elegant Dark Slate Grey Theme Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* Global Font & Soft Off-White Background */
+/* Global Font & Light Grey Background */
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     font-family: 'Inter', sans-serif;
-    background-color: #EFECE6 !important; /* Soft Creamy Background */
-    color: #1F1F1F !important;
+    background-color: #F4F6F8 !important; /* Soft Slate Light Grey */
+    color: #1A1D20 !important;
 }
 
-/* Force Text Visibility for Headings & Paragraphs */
+/* Headings & Text Color */
 h1, h2, h3, h4, h5, h6, p, label, span, div, .stMarkdown {
-    color: #1F1F1F !important;
+    color: #1A1D20 !important;
 }
 
-/* Typography & Title Styling */
 h1, h2, h3 {
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 700 !important;
 }
 
-/* Sidebar Styling - Soft Off-White */
+/* Sidebar Styling - Dark Slate Grey */
 [data-testid="stSidebar"] {
-    background-color: #F4F3EF !important;
-    border-right: 1px solid #D8D5CD !important;
+    background-color: #1E2228 !important; /* Dark Grey Accent */
+    border-right: 1px solid #343A40 !important;
 }
 
 [data-testid="stSidebar"] * {
-    color: #1F1F1F !important;
+    color: #E9ECEF !important;
 }
 
-/* Input Fields & Text Areas - Soft Off-White Container */
+/* Sidebar Inputs */
+[data-testid="stSidebar"] input {
+    background-color: #2B3036 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #495057 !important;
+}
+
+/* Input Fields & Text Areas - Clean Light Grey Surface */
 div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="textarea"] {
-    background-color: #F8F7F4 !important;
-    border: 1px solid #CCC9C0 !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #CED4DA !important;
     border-radius: 8px !important;
 }
 
 div[data-baseweb="base-input"] input, div[data-baseweb="select"] * {
-    color: #1F1F1F !important;
-    background-color: #F8F7F4 !important;
+    color: #1A1D20 !important;
+    background-color: #FFFFFF !important;
 }
 
 /* Input Labels */
 label[data-testid="stWidgetLabel"] p {
-    color: #2D2D2D !important;
+    color: #343A40 !important;
     font-weight: 600 !important;
 }
 
-/* Pathao Red Accent Buttons */
+/* Pathao Red Primary Buttons */
 .stButton>button {
     background-color: #E1251B !important;
     border: none !important;
@@ -85,24 +91,24 @@ label[data-testid="stWidgetLabel"] p {
 .stButton>button:hover {
     background-color: #B81C14 !important;
     color: #FFFFFF !important;
-    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.25) !important;
+    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.3) !important;
 }
 
-/* Tab Navigation Styling */
+/* Tab Navigation Styling - Modern Grey & Red Accent */
 .stTabs [data-baseweb="tab-list"] {
     gap: 8px !important;
-    border-bottom: 2px solid #D8D5CD !important;
+    border-bottom: 2px solid #DEE2E6 !important;
 }
 
 .stTabs [data-baseweb="tab"] {
-    background-color: #F4F3EF !important;
-    border: 1px solid #D8D5CD !important;
+    background-color: #E9ECEF !important;
+    border: 1px solid #CED4DA !important;
     border-radius: 8px 8px 0px 0px !important;
     padding: 10px 20px !important;
 }
 
 .stTabs [data-baseweb="tab"] p {
-    color: #4A4A4A !important;
+    color: #495057 !important;
     font-weight: 600 !important;
 }
 
@@ -115,29 +121,29 @@ label[data-testid="stWidgetLabel"] p {
     color: #FFFFFF !important;
 }
 
-/* Form, Expander & Container Cards - Off-White Surface */
+/* Form, Expander & Container Cards - White & Grey Border */
 [data-testid="stForm"], div[data-testid="stExpander"], [data-testid="stForm"] > div {
-    background-color: #F4F3EF !important;
-    border: 1px solid #D8D5CD !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #DEE2E6 !important;
     border-radius: 12px !important;
-    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.03) !important;
+    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* Custom Metric Cards */
 .metric-box {
-    background-color: #F4F3EF !important;
-    border: 1px solid #D8D5CD !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #DEE2E6 !important;
     border-top: 4px solid #E1251B !important;
     border-radius: 10px !important;
     padding: 16px !important;
     text-align: center !important;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.03) !important;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.04) !important;
 }
 
 .metric-box h4 {
     margin: 0 !important;
     font-size: 13px !important;
-    color: #555555 !important;
+    color: #6C757D !important;
     text-transform: uppercase !important;
 }
 
@@ -361,7 +367,7 @@ if is_admin_view:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
                         db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
-                        st.success("Agent Info saved!")
+                        st.success("Agent Info saved permanently to Database!")
                         st.rerun()
 
         agents = db.get_agents()
@@ -392,7 +398,7 @@ if is_admin_view:
                             "slide_url": format_embed_url(new_slide.strip()),
                             "form_url": format_form_url(new_form.strip())
                         })
-                        st.success(f"Topic '{top['name']}' updated!")
+                        st.success(f"Topic '{top['name']}' updated permanently!")
                         st.rerun()
 
     # 2.5 TRAINING VIEWER FOR ADMIN LIVE SESSIONS
@@ -485,7 +491,7 @@ if is_admin_view:
             if st.button("🚀 Save & Publish Calendar", type="primary"):
                 sched_id = str(uuid.uuid4())
                 db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress")
-                st.success("Calendar published!")
+                st.success("Calendar published permanently!")
                 st.rerun()
 
         st.subheader("📁 Saved Calendars & Daily Slot Status Tracker")
@@ -549,7 +555,7 @@ if is_admin_view:
                         
                         if st.form_submit_button("💾 Save Score"):
                             db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_final)
-                            st.success(f"Score Saved!")
+                            st.success(f"Score Saved permanently!")
                             st.rerun()
 
     # 5. REFRESHER REQUESTS MANAGEMENT
@@ -681,4 +687,4 @@ else:
                         "topic_name": a_topic,
                         "preferred_slot": f"{r_date.strftime('%d %b %Y')} ({r_time})"
                     })
-                    st.success("Training Request submitted successfully to Admin!")
+                    st.success("Training Request submitted successfully!")
