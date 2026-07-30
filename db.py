@@ -76,6 +76,18 @@ def init_db():
     )
     """)
 
+    # 6. Self Training Logs Table (NEW)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS self_training_logs (
+        id TEXT PRIMARY KEY,
+        empid TEXT,
+        name TEXT,
+        channel TEXT,
+        topic_name TEXT,
+        access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Default Topics Insertion
     cursor.execute("SELECT COUNT(*) FROM topics")
     if cursor.fetchone()[0] == 0:
@@ -265,3 +277,22 @@ def update_refresher_status(req_id, status, rejection_reason="", training_status
     """, (status, rejection_reason, training_status, req_id))
     conn.commit()
     conn.close()
+
+# Self Training Log Functions (NEW)
+def insert_self_training_log(log_id, empid, name, channel, topic_name):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO self_training_logs (id, empid, name, channel, topic_name)
+        VALUES (?, ?, ?, ?, ?)
+    """, (log_id, empid, name, channel, topic_name))
+    conn.commit()
+    conn.close()
+
+def get_self_training_logs():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM self_training_logs ORDER BY access_time DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
