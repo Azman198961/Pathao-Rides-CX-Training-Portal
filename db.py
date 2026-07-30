@@ -88,6 +88,21 @@ def init_db():
     """)
     
     conn.commit()
+    
+    # --- Check & Seed Default Topics if Database is empty ---
+    cursor.execute("SELECT COUNT(*) FROM topics")
+    if cursor.fetchone()[0] == 0:
+        default_topics = [
+            ("t1", "Module 1: Orientation & CX Basics", "02:00 HR", "Md Asikul islam Azman", "", ""),
+            ("t2", "Module 2: Pathao Rides Operating SOP & Policy", "03:00 HR", "Md Asikul islam Azman", "", ""),
+            ("t3", "Module 3: Inbound Voice Call Handling & Etiquettes", "03:00 HR", "Md Asikul islam Azman", "", ""),
+            ("t4", "Module 4: Live Chat, Social Media & Email Handling", "02:30 HR", "Md Asikul islam Azman", "", ""),
+            ("t5", "Module 5: Complaint Resolution & Escalation Management", "03:00 HR", "Md Asikul islam Azman", "", ""),
+            ("t6", "Module 6: Campaign Management & Tool Operations", "02:00 HR", "Md Asikul islam Azman", "", "")
+        ]
+        cursor.executemany("INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url) VALUES (?, ?, ?, ?, ?, ?)", default_topics)
+        conn.commit()
+
     conn.close()
 
 # --- Helper DB Functions ---
@@ -106,7 +121,6 @@ def upsert_agent(empid, name, email, phone):
         ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?
     """, (empid, name, email, phone, name, email, phone))
     
-    # Auto Insert or Keep Evaluation entry
     conn.execute("""
         INSERT INTO evaluations (empid, agent_name) 
         VALUES (?, ?)
