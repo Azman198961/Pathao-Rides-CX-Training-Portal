@@ -10,7 +10,7 @@ import db
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🎓", layout="wide")
 db.init_db()
 
-# Styling
+# Custom CSS Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -172,12 +172,12 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
 
-    # 3. INDUCTION CALENDAR PLANNER (MULTI-SLOT PER DAY)
+    # 3. INDUCTION CALENDAR PLANNER (MULTI-SLOT SUPPORTED)
     with admin_tab3:
         st.header("📅 Induction Training Period Calendar Planner")
         st.caption("Select Date Range, add multiple time slots/topics per day, or mark Day Off.")
         
-        # Step 1: Period Selection
+        # Step 1: Period Selection Form
         with st.form("period_select_form"):
             b_col1, b_col2, b_col3 = st.columns([2, 1.5, 1.5])
             batch_title = b_col1.text_input("Batch / Training Name", value="Induction Batch - Rides")
@@ -193,7 +193,6 @@ if is_admin_view:
                 num_days = (date_to - date_from).days + 1
                 dates_list = [(date_from + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(num_days)]
                 
-                # Initialize day slots dictionary if new
                 day_slots = {}
                 for d in dates_list:
                     day_slots[d] = [
@@ -210,6 +209,14 @@ if is_admin_view:
 
         planner_data = st.session_state.get("current_planner", None)
         
+        # Safe Fallback to avoid KeyError from old session states
+        if planner_data and "day_slots" not in planner_data:
+            planner_data["day_slots"] = {}
+            for d in planner_data.get("dates", []):
+                planner_data["day_slots"][d] = [
+                    {"type": "Topic Session", "topic": "", "custom": "", "time": "10:00 AM - 01:00 PM", "trainer": "Md Asikul islam Azman", "off": False}
+                ]
+
         if planner_data:
             st.divider()
             st.subheader(f"📌 Planning for: **{planner_data['batch']}** ({planner_data['from']} to {planner_data['to']})")
@@ -223,13 +230,13 @@ if is_admin_view:
             full_schedule_output = []
 
             # Loop through days
-            for idx, d_str in enumerate(planner_data["dates"]):
+            for idx, d_str in enumerate(planner_data.get("dates", [])):
                 dt_obj = date.fromisoformat(d_str)
                 day_name = dt_obj.strftime("%A")
                 
                 st.markdown(f"### 🗓️ Day {idx+1}: `{d_str}` ({day_name})")
                 
-                # Check Day Off toggle for whole day
+                # Check Day Off toggle
                 is_day_off = st.checkbox(f"🔴 Mark Entire Day as DAY OFF", key=f"off_day_{d_str}")
                 
                 if is_day_off:
@@ -243,7 +250,7 @@ if is_admin_view:
                         "Status": "Day Off"
                     })
                 else:
-                    slots = planner_data["day_slots"].get(d_str, [])
+                    slots = planner_data.get("day_slots", {}).get(d_str, [])
                     
                     for s_idx, slot in enumerate(slots):
                         st.markdown(f"**Slot #{s_idx+1}**")
@@ -275,6 +282,8 @@ if is_admin_view:
 
                     # Button to Add Extra Slot in the same day
                     if st.button(f"➕ Add Another Slot for {d_str}", key=f"add_slot_{d_str}"):
+                        if d_str not in planner_data["day_slots"]:
+                            planner_data["day_slots"][d_str] = []
                         planner_data["day_slots"][d_str].append({
                             "type": "Topic Session", "topic": "", "custom": "", "time": "02:00 PM - 05:00 PM", "trainer": "Md Asikul islam Azman", "off": False
                         })
