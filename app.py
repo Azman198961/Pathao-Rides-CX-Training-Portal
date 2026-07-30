@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import uuid
-from datetime import date
+import json
+import requests
+from datetime import date, timedelta
 
 import db
 
@@ -52,31 +54,22 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     transition: all 0.3s ease;
     height: 100%;
 }
-.topic-card-box:hover {
-    border-color: #FF7A45;
-    box-shadow: 0 4px 15px rgba(255, 122, 69, 0.15);
-}
 </style>
 """, unsafe_allow_html=True)
 
-# URL formatters
+# Helper functions
 def format_embed_url(url):
-    if not url:
-        return ""
-    if "/edit" in url:
-        return url.split("/edit")[0] + "/embed"
-    elif "/pub" in url:
-        return url.split("/pub")[0] + "/embed"
+    if not url: return ""
+    if "/edit" in url: return url.split("/edit")[0] + "/embed"
+    elif "/pub" in url: return url.split("/pub")[0] + "/embed"
     elif not url.endswith("/embed") and "docs.google.com/presentation" in url:
         return url.rstrip('/') + "/embed"
     return url
 
 def format_form_url(url):
-    if not url:
-        return ""
+    if not url: return ""
     if "docs.google.com/forms" in url and not url.endswith("embedded=true"):
-        if "?" in url:
-            return url + "&embedded=true"
+        if "?" in url: return url + "&embedded=true"
         return url + "?embedded=true"
     return url
 
@@ -112,7 +105,7 @@ if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "👥 Agent Information", 
         "📊 Topics & Quiz Editor", 
-        "📅 Induction Calendar", 
+        "📅 Induction Calendar Planner", 
         "📝 Agent Evaluation", 
         "🔁 Refresher Requests"
     ])
@@ -179,49 +172,145 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
 
-    # 3. INDUCTION CALENDAR
+    # 3. INDUCTION CALENDAR PLANNER (PERIOD-BASED)
     with admin_tab3:
-        st.header("📅 Induction Training Calendar & Task Allocator")
-        st.caption("Allocate topics and custom tasks into training dates.")
+        st.header("📅 Induction Training Period Calendar Planner")
+        st.caption("Select Date Range, configure daily topics/time/off-days, and publish to Google Sheet.")
         
-        with st.expander("➕ Add Calendar Schedule / Task", expanded=False):
-            with st.form("cal_form"):
-                col_d, col_t = st.columns(2)
-                ev_date = col_d.date_input("Event Date", value=date.today())
-                ev_time = col_t.text_input("Time Slot (e.g., 10:00 AM - 12:00 PM)", value="10:00 AM - 11:30 AM")
-                
-                ev_type = st.selectbox("Type", ["Topic Session", "Quiz / Exam", "Live Communication", "Other Task / Meeting"])
-                
-                t_names = [t["name"] for t in db.get_topics()]
-                if ev_type == "Topic Session":
-                    ev_title = st.selectbox("Select Topic", t_names)
-                else:
-                    ev_title = st.text_input("Task / Event Title *")
-                
-                ev_details = st.text_area("Details / Notes")
-                
-                if st.form_submit_button("📌 Add to Calendar"):
-                    if not ev_title:
-                        st.error("Title required!")
-                    else:
-                        db.insert_calendar_event(str(uuid.uuid4()), ev_date.strftime("%Y-%m-%d"), ev_time, ev_title, ev_type, ev_details)
-                        st.success("Calendar Schedule Added!")
-                        st.rerun()
+        # Step 1: Period Selection
+        with st.form("period_select_form"):
+            b_col1, b_col2, b_col3 = st.columns([2, 1.5, 1.5])
+            batch_title = b_col1.text_input("Batch / Training Name", value="Induction Batch - Rides")
+            date_from = b_col2.date_input("Date From", value=date.today())
+            date_to = b_col3.date_input("Date To", value=date.today() + timedelta(days=6))
+            
+            p_submit = st.form_submit_button("📅 Generate Day-wise Planner")
 
-        st.subheader("Upcoming Schedules & Tasks")
-        events = db.get_calendar_events()
-        if not events:
-            st.info("No schedule allocated yet.")
+        if "current_planner" not in st.session_state or p_submit:
+            if date_from > date_to:
+                st.error("'Date From' cannot be later than 'Date To'!")
+            else:
+                # Generate date list
+                num_days = (date_to - date_from).days + 1
+                dates_list = [date_from + timedelta(days=i) for i in range(num_days)]
+                st.session_state.current_planner = {
+                    "batch": batch_title,
+                    "from": date_from.strftime("%Y-%m-%d"),
+                    "to": date_to.strftime("%Y-%m-%d"),
+                    "dates": [d.strftime("%Y-%m-%d") for d in dates_list]
+                }
+
+        planner_data = st.session_state.get("current_planner", None)
+        
+        if planner_data:
+            st.divider()
+            st.subheader(f"📌 Planning for: **{planner_data['batch']}** ({planner_data['from']} to {planner_data['to']})")
+            
+            topics_db = db.get_topics()
+            topic_names = ["-- Select Topic --"] + [t['name'] for t in topics_db]
+            
+            # Step 2: Day-wise Configuration Form
+            schedule_entries = []
+            
+            # Webhook URL Input for Google Sheets Auto-Submit
+            webhook_url = st.text_input("🔗 Google Sheet Webhook URL (Apps Script / Zapier / Make)", 
+                                        placeholder="https://script.google.com/macros/s/.../exec",
+                                        help="Paste your Google Apps Script Webhook URL to automatically append rows to Google Sheets.")
+            
+            with st.form("daywise_schedule_form"):
+                for idx, d_str in enumerate(planner_data["dates"]):
+                    dt_obj = date.fromisoformat(d_str)
+                    day_name = dt_obj.strftime("%A")
+                    
+                    st.markdown(f"#### 🗓️ Day {idx+1}: `{d_str}` ({day_name})")
+                    
+                    c1, c2, c3, c4 = st.columns([1.5, 2, 2, 2])
+                    is_off = c1.checkbox("🔴 Day Off", key=f"off_{d_str}")
+                    
+                    if is_off:
+                        c2.text_input("Activity", value="DAY OFF / REST DAY", disabled=True, key=f"act_{d_str}")
+                        c3.text_input("Time Slot", value="N/A", disabled=True, key=f"time_{d_str}")
+                        c4.text_input("Trainer", value="N/A", disabled=True, key=f"tr_{d_str}")
+                        
+                        schedule_entries.append({
+                            "Date": d_str,
+                            "Day": day_name,
+                            "Activity / Topic": "DAY OFF",
+                            "Time Slot": "N/A",
+                            "Trainer": "N/A",
+                            "Status": "Day Off"
+                        })
+                    else:
+                        activity_type = c2.selectbox("Activity Type", ["Topic Session", "Other Task / Exam / Mock Call"], key=f"atype_{d_str}")
+                        
+                        if activity_type == "Topic Session":
+                            sel_topic = c2.selectbox("Select Topic", topic_names, key=f"top_{d_str}")
+                            act_val = sel_topic if sel_topic != "-- Select Topic --" else "Custom Session"
+                        else:
+                            act_val = c2.text_input("Task Title", value="Mock Call & Feedback", key=f"custom_{d_str}")
+                            
+                        t_slot = c3.text_input("Time Slot", value="10:00 AM - 01:00 PM", key=f"tslot_{d_str}")
+                        tr_name = c4.text_input("Trainer Name", value="Md Asikul islam Azman", key=f"trname_{d_str}")
+                        
+                        schedule_entries.append({
+                            "Date": d_str,
+                            "Day": day_name,
+                            "Activity / Topic": act_val,
+                            "Time Slot": t_slot,
+                            "Trainer": tr_name,
+                            "Status": "Scheduled"
+                        })
+                    st.divider()
+
+                # Step 3: Publish Calendar Button
+                publish_btn = st.form_submit_button("🚀 Publish Training Calendar to Google Sheet")
+
+            if publish_btn:
+                # Save locally in DB
+                sched_id = str(uuid.uuid4())
+                json_str = json.dumps(schedule_entries)
+                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json_str, "Published")
+                
+                st.success("✅ Training Calendar saved to Database successfully!")
+                
+                # Auto Webhook Trigger for Google Sheets
+                if webhook_url:
+                    try:
+                        resp = requests.post(webhook_url, json={
+                            "batch": planner_data['batch'],
+                            "schedule": schedule_entries
+                        }, timeout=10)
+                        if resp.status_status in [200, 201]:
+                            st.success("📊 Automatically exported to your Google Sheet successfully!")
+                        else:
+                            st.warning(f"Webhook responded with code: {resp.status_code}")
+                    except Exception as e:
+                        st.error(f"Error submitting to Google Sheet Webhook: {e}")
+                else:
+                    st.info("💡 Pro Tip: Attach a Google Apps Script Webhook URL above for direct 1-click sync. You can also download the CSV below to paste directly into Google Sheets.")
+
+                # Downloadable CSV for direct Google Sheet Paste
+                df_export = pd.DataFrame(schedule_entries)
+                st.dataframe(df_export, use_container_width=True)
+                csv = df_export.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download CSV for Google Sheets",
+                    data=csv,
+                    file_name=f"{planner_data['batch']}_calendar.csv",
+                    mime="text/csv"
+                )
+
+        st.subheader("📁 Saved / Published Calendars")
+        batches = db.get_batch_schedules()
+        if not batches:
+            st.info("No Published Calendars found.")
         else:
-            for ev in events:
-                with st.container(border=True):
-                    ce1, ce2 = st.columns([4, 1])
-                    ce1.markdown(f"### 🗓️ `{ev['event_date']}` | ⏰ `{ev['event_time']}`")
-                    ce1.markdown(f"**[{ev['event_type']}]** **{ev['title']}**")
-                    if ev['details']:
-                        ce1.caption(f"📝 Notes: {ev['details']}")
-                    if ce2.button("🗑️ Remove", key=f"del_ev_{ev['id']}"):
-                        db.delete_calendar_event(ev['id'])
+            for b in batches:
+                with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']})"):
+                    data_list = json.loads(b['schedule_json'])
+                    st.dataframe(pd.DataFrame(data_list), use_container_width=True)
+                    if st.button("🗑️ Delete Schedule", key=f"del_b_{b['id']}"):
+                        db.delete_batch_schedule(b['id'])
                         st.rerun()
 
     # 4. AGENT EVALUATION SYSTEM
@@ -247,7 +336,6 @@ if is_admin_view:
                         mock = c5.number_input("Mock Call Score", min_value=0.0, max_value=100.0, value=float(ev['mock_call']), key=f"mock_{ev['empid']}")
                         live = c6.number_input("Live Communication", min_value=0.0, max_value=100.0, value=float(ev['live_comm']), key=f"live_{ev['empid']}")
                         
-                        # Auto-Calculated Final Score Suggestion
                         suggested_avg = round((q1 + q2 + q3 + ass + mock + live) / 6, 2)
                         final_sc = c7.number_input("Final Score", min_value=0.0, max_value=100.0, value=float(ev['final_score'] or suggested_avg), key=f"fin_{ev['empid']}")
                         
@@ -289,7 +377,7 @@ if is_admin_view:
 else:
     # AGENT WORKSPACE PORTAL
     st.header("Agent Self-Service Hub")
-    agent_tab1, agent_tab2 = st.tabs(["📖 Study Topics & Take Quiz", "🔁 Request Refresher Session"])
+    agent_tab1, agent_tab2, agent_tab3 = st.tabs(["📖 Study Topics & Take Quiz", "📅 View Training Calendar", "🔁 Request Refresher Session"])
     
     with agent_tab1:
         all_topics = db.get_topics()
@@ -340,6 +428,17 @@ else:
                             st.info("No Quiz Form link added for this topic yet. Admin can attach a Google Form link from Admin View.")
 
     with agent_tab2:
+        st.subheader("📅 Published Training Schedules")
+        published_batches = db.get_batch_schedules()
+        if not published_batches:
+            st.info("No active training schedule published yet.")
+        else:
+            for b in published_batches:
+                st.markdown(f"### 📆 **{b['batch_name']}** (`{b['start_date']}` to `{b['end_date']}`)")
+                data_list = json.loads(b['schedule_json'])
+                st.dataframe(pd.DataFrame(data_list), use_container_width=True)
+
+    with agent_tab3:
         st.subheader("🔁 Request Refresher Session")
         topics = db.get_topics()
         t_opts = [t["name"] for t in topics] if topics else []
