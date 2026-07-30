@@ -89,20 +89,27 @@ def init_db():
     
     conn.commit()
     
-    # --- Check & Seed Default Topics if Database is empty ---
-    cursor.execute("SELECT COUNT(*) FROM topics")
-    if cursor.fetchone()[0] == 0:
-        default_topics = [
-            ("t1", "Module 1: Orientation & CX Basics", "02:00 HR", "Md Asikul islam Azman", "", ""),
-            ("t2", "Module 2: Pathao Rides Operating SOP & Policy", "03:00 HR", "Md Asikul islam Azman", "", ""),
-            ("t3", "Module 3: Inbound Voice Call Handling & Etiquettes", "03:00 HR", "Md Asikul islam Azman", "", ""),
-            ("t4", "Module 4: Live Chat, Social Media & Email Handling", "02:30 HR", "Md Asikul islam Azman", "", ""),
-            ("t5", "Module 5: Complaint Resolution & Escalation Management", "03:00 HR", "Md Asikul islam Azman", "", ""),
-            ("t6", "Module 6: Campaign Management & Tool Operations", "02:00 HR", "Md Asikul islam Azman", "", "")
-        ]
-        cursor.executemany("INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url) VALUES (?, ?, ?, ?, ?, ?)", default_topics)
-        conn.commit()
-
+    # --- Exact 8 Topics Seeding ---
+    exact_topics = [
+        ("t1", "Fare", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed", ""),
+        ("t2", "Joining Process", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed", ""),
+        ("t3", "Star Program", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1SbNxrXajQlZIpT6fvT_a9bXwmIhl1dQZh2olZ0s8lMI/embed", ""),
+        ("t4", "Payment", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1Q9ous8zu6CmPe2Yw8oTKS-FkPKHUOHPT/embed", ""),
+        ("t5", "User SOP", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1TCkGIRTbQ87ZmW8vZM4WS2nN237GzQWi/embed", ""),
+        ("t6", "Rider SOP", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1A28xX9YdsEuHOIGEPfEigQ6C_azRmNap/embed", ""),
+        ("t7", "QA Parameters", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1IT7U4N88rSaHSsbVPqY5K03kfKA3iddW98VT9lsPLVM/embed", ""),
+        ("t8", "Pathao Internal Tools", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1UZQiOydwqm9etUb8MzEDXwGHbLipc30O/embed", "")
+    ]
+    
+    # Insert or Update so current topics list gets synced instantly
+    for t in exact_topics:
+        cursor.execute("""
+            INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET name=?, slide_url=?
+        """, (t[0], t[1], t[2], t[3], t[4], t[5], t[1], t[4]))
+        
+    conn.commit()
     conn.close()
 
 # --- Helper DB Functions ---
