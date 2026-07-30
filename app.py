@@ -16,146 +16,6 @@ import db
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Pathao Red & Elegant Dark Slate Grey Theme Styling
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-
-/* Global Font & Light Grey Background */
-html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
-    font-family: 'Inter', sans-serif;
-    background-color: #F4F6F8 !important; /* Soft Slate Light Grey */
-    color: #1A1D20 !important;
-}
-
-/* Headings & Text Color */
-h1, h2, h3, h4, h5, h6, p, label, span, div, .stMarkdown {
-    color: #1A1D20 !important;
-}
-
-h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
-    font-weight: 700 !important;
-}
-
-/* Sidebar Styling - Dark Slate Grey */
-[data-testid="stSidebar"] {
-    background-color: #1E2228 !important; /* Dark Grey Accent */
-    border-right: 1px solid #343A40 !important;
-}
-
-[data-testid="stSidebar"] * {
-    color: #E9ECEF !important;
-}
-
-/* Sidebar Inputs */
-[data-testid="stSidebar"] input {
-    background-color: #2B3036 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #495057 !important;
-}
-
-/* Input Fields & Text Areas - Clean Light Grey Surface */
-div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="textarea"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid #CED4DA !important;
-    border-radius: 8px !important;
-}
-
-div[data-baseweb="base-input"] input, div[data-baseweb="select"] * {
-    color: #1A1D20 !important;
-    background-color: #FFFFFF !important;
-}
-
-/* Input Labels */
-label[data-testid="stWidgetLabel"] p {
-    color: #343A40 !important;
-    font-weight: 600 !important;
-}
-
-/* Pathao Red Primary Buttons */
-.stButton>button {
-    background-color: #E1251B !important;
-    border: none !important;
-    color: #FFFFFF !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    padding: 10px 16px !important;
-    transition: all 0.2s ease !important;
-}
-
-.stButton>button * {
-    color: #FFFFFF !important;
-}
-
-.stButton>button:hover {
-    background-color: #B81C14 !important;
-    color: #FFFFFF !important;
-    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.3) !important;
-}
-
-/* Tab Navigation Styling - Modern Grey & Red Accent */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px !important;
-    border-bottom: 2px solid #DEE2E6 !important;
-}
-
-.stTabs [data-baseweb="tab"] {
-    background-color: #E9ECEF !important;
-    border: 1px solid #CED4DA !important;
-    border-radius: 8px 8px 0px 0px !important;
-    padding: 10px 20px !important;
-}
-
-.stTabs [data-baseweb="tab"] p {
-    color: #495057 !important;
-    font-weight: 600 !important;
-}
-
-.stTabs [aria-selected="true"] {
-    border-color: #E1251B !important;
-    background-color: #E1251B !important;
-}
-
-.stTabs [aria-selected="true"] p {
-    color: #FFFFFF !important;
-}
-
-/* Form, Expander & Container Cards - White & Grey Border */
-[data-testid="stForm"], div[data-testid="stExpander"], [data-testid="stForm"] > div {
-    background-color: #FFFFFF !important;
-    border: 1px solid #DEE2E6 !important;
-    border-radius: 12px !important;
-    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04) !important;
-}
-
-/* Custom Metric Cards */
-.metric-box {
-    background-color: #FFFFFF !important;
-    border: 1px solid #DEE2E6 !important;
-    border-top: 4px solid #E1251B !important;
-    border-radius: 10px !important;
-    padding: 16px !important;
-    text-align: center !important;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.04) !important;
-}
-
-.metric-box h4 {
-    margin: 0 !important;
-    font-size: 13px !important;
-    color: #6C757D !important;
-    text-transform: uppercase !important;
-}
-
-.metric-box h3 {
-    margin: 6px 0 0 0 !important;
-    font-size: 22px !important;
-    color: #E1251B !important;
-    font-weight: 700 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # Helper functions
 def format_embed_url(url):
     if not url: return ""
@@ -178,7 +38,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     story = []
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#E1251B'), spaceAfter=10)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#D32F2F'), spaceAfter=10)
     sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=15)
     heading_style = ParagraphStyle('HeadStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#111111'), spaceAfter=8)
 
@@ -213,7 +73,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
         
         t = Table(table_data, colWidths=[55, 110, 45, 45, 45, 45, 45, 45, 65])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E1251B')),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#D32F2F')),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -236,7 +96,7 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 with st.sidebar:
-    st.markdown("<h2 style='color: #E1251B; margin-bottom: 0;'>🔴 Pathao CX</h2>", unsafe_allow_html=True)
+    st.title("🔴 Pathao CX")
     st.caption("Rides Department CMT")
     st.divider()
     role = st.radio("Access Level:", ["Agent View", "Admin View"])
@@ -284,14 +144,14 @@ if is_admin_view:
 
         c_met1, c_met2, c_met3, c_met4 = st.columns(4)
         with c_met1:
-            st.markdown(f"<div class='metric-box'><h4>Active Batch</h4><h3>{active_batch['batch_name'] if active_batch else 'N/A'}</h3></div>", unsafe_allow_html=True)
+            st.metric("Active Batch", active_batch['batch_name'] if active_batch else "N/A")
         with c_met2:
-            st.markdown(f"<div class='metric-box'><h4>Batch Status</h4><h3>{active_batch['status'] if active_batch else 'N/A'}</h3></div>", unsafe_allow_html=True)
+            st.metric("Batch Status", active_batch['status'] if active_batch else "N/A")
         with c_met3:
-            st.markdown(f"<div class='metric-box'><h4>Total Agents</h4><h3>{len(df_evals) if not df_evals.empty else 0}</h3></div>", unsafe_allow_html=True)
+            st.metric("Total Agents", len(df_evals) if not df_evals.empty else 0)
         with c_met4:
             avg_score = df_evals['final_score'].mean() if not df_evals.empty and 'final_score' in df_evals else 0
-            st.markdown(f"<div class='metric-box'><h4>Batch Avg Score</h4><h3>{avg_score:.1f}%</h3></div>", unsafe_allow_html=True)
+            st.metric("Batch Avg Score", f"{avg_score:.1f}%")
 
         st.divider()
 
@@ -330,7 +190,7 @@ if is_admin_view:
             pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
             st.download_button("📥 Download Current Summary (PDF)", pdf_bytes, "Induction_Live_Summary.pdf", "application/pdf")
 
-    # SELF TRAINING LOGS (ADMIN VIEW)
+    # SELF TRAINING LOGS
     with admin_tab_logs:
         st.header("📖 Self Training Activity Logs")
         st.caption("Logs of agents accessing self-training topics.")
@@ -367,7 +227,7 @@ if is_admin_view:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
                         db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
-                        st.success("Agent Info saved permanently to Database!")
+                        st.success("Agent Info saved permanently!")
                         st.rerun()
 
         agents = db.get_agents()
@@ -401,7 +261,7 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated permanently!")
                         st.rerun()
 
-    # 2.5 TRAINING VIEWER FOR ADMIN LIVE SESSIONS
+    # TRAINING VIEWER
     with admin_tab_view:
         st.header("🖥️ Admin Training Presentation Viewer")
         st.caption("Select a topic directly to launch the presentation and quiz form during live training sessions.")
@@ -566,7 +426,7 @@ if is_admin_view:
             st.info("No Refresher Requests found.")
         else:
             for req in all_requests:
-                with st.container(border=True):
+                with st.container():
                     c_info, c_action = st.columns([3, 2])
                     with c_info:
                         st.markdown(f"### 👤 Agent: **{req['name']}** (`{req['empid']}`)")
@@ -595,7 +455,7 @@ if is_admin_view:
                                     st.rerun()
 
 else:
-    # AGENT WORKSPACE PORTAL (2 OPTIONS ONLY)
+    # AGENT WORKSPACE PORTAL
     st.header("Agent Self-Service Hub")
     agent_tab1, agent_tab2 = st.tabs(["📖 Self Training", "🔁 Request Refresher Session"])
     
