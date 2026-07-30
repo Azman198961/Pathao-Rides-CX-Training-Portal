@@ -168,11 +168,13 @@ st.title("Pathao Rides — CX Training Portal")
 CHANNEL_OPTIONS = ["Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
 
 if is_admin_view:
-    admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
+    # 🆕 "Training Viewer" Tab Added Here
+    admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "📈 Performance Dashboard",
         "📖 Self Training Logs",
         "👥 Agent Directory", 
         "📊 Topics & Quiz Editor", 
+        "🖥️ Training Viewer",  # <-- New Tab for Admin Live Presentations
         "📅 Induction Calendar Planner", 
         "📝 Agent Evaluation", 
         "🔁 Refresher Requests"
@@ -305,6 +307,42 @@ if is_admin_view:
                         })
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
+
+    # 🆕 2.5 TRAINING VIEWER FOR ADMIN LIVE SESSIONS
+    with admin_tab_view:
+        st.header("🖥️ Admin Training Presentation Viewer")
+        st.caption("Select a topic directly to launch the presentation and quiz form during live training sessions.")
+        
+        all_topics_admin = db.get_topics()
+        if not all_topics_admin:
+            st.warning("No training topics available.")
+        else:
+            topic_names_admin = [t["name"] for t in all_topics_admin]
+            selected_topic_name = st.selectbox("🎯 Select Topic to Present:", ["-- Select Topic --"] + topic_names_admin, key="admin_topic_viewer_select")
+            
+            if selected_topic_name != "-- Select Topic --":
+                selected_topic_obj = next((t for t in all_topics_admin if t["name"] == selected_topic_name), None)
+                
+                if selected_topic_obj:
+                    st.divider()
+                    st.markdown(f"## 📊 Module: **{selected_topic_obj['name']}**")
+                    st.caption(f"⏱️ Duration: {selected_topic_obj['duration']} | Assigned Trainer: {selected_topic_obj.get('trainer_name', 'Md Asikul islam Azman')}")
+
+                    adm_content_tab1, adm_content_tab2 = st.tabs(["📺 Presentation Slides", "📝 Quiz Form"])
+                    
+                    with adm_content_tab1:
+                        embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
+                        if embed_slide:
+                            st.components.v1.iframe(embed_slide, height=580, scrolling=False)
+                        else:
+                            st.warning("No Slide Presentation available for this topic.")
+                            
+                    with adm_content_tab2:
+                        embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
+                        if embed_form:
+                            st.components.v1.iframe(embed_form, height=700, scrolling=True)
+                        else:
+                            st.info("No Quiz Form link added for this topic.")
 
     # 3. INDUCTION CALENDAR PLANNER
     with admin_tab3:
