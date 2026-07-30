@@ -16,97 +16,136 @@ import db
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Pathao Red & White Premium Theme Styling
+# Pathao Red & White Premium Theme Styling (Fixed Contrast & Visibility)
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 /* Global Font & Background */
-html, body, [data-testid="stAppViewContainer"] {
+html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     font-family: 'Inter', sans-serif;
-    background-color: #FAFAFA;
-    color: #212121;
+    background-color: #F8F9FA !important;
+    color: #111111 !important;
 }
 
-/* Sidebar Styling */
-[data-testid="stSidebar"] {
-    background-color: #FFFFFF;
-    border-right: 1px solid #E0E0E0;
+/* Force Text Visibility for Headings & Paragraphs */
+h1, h2, h3, h4, h5, h6, p, label, span, div, .stMarkdown {
+    color: #111111 !important;
 }
 
-/* Typography & Headings */
-h1, h2, h3, .stTabs [data-baseweb="tab"] p {
+/* Typography & Title Styling */
+h1, h2, h3 {
     font-family: 'Space Grotesk', sans-serif !important;
-    color: #111111;
+    font-weight: 700 !important;
+}
+
+/* Sidebar Styling & Text Fix */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E0E0E0 !important;
+}
+
+[data-testid="stSidebar"] * {
+    color: #111111 !important;
+}
+
+/* Input Fields & Text Areas */
+div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="textarea"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #CCCCCC !important;
+    border-radius: 8px !important;
+}
+
+div[data-baseweb="base-input"] input, div[data-baseweb="select"] * {
+    color: #111111 !important;
+    background-color: #FFFFFF !important;
+}
+
+/* Input Labels */
+label[data-testid="stWidgetLabel"] p {
+    color: #333333 !important;
+    font-weight: 600 !important;
 }
 
 /* Pathao Red Accent Buttons */
 .stButton>button {
-    background-color: #E1251B;
-    border: none;
-    color: #FFFFFF;
-    border-radius: 8px;
-    font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    width: 100%;
-    transition: all 0.2s ease;
-    padding: 10px 16px;
-}
-.stButton>button:hover {
-    background-color: #B81C14;
-    color: #FFFFFF;
-    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.25);
+    background-color: #E1251B !important;
+    border: none !important;
+    color: #FFFFFF !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    padding: 10px 16px !important;
+    transition: all 0.2s ease !important;
 }
 
-/* Tab Navigation */
+.stButton>button * {
+    color: #FFFFFF !important;
+}
+
+.stButton>button:hover {
+    background-color: #B81C14 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.25) !important;
+}
+
+/* Tab Navigation Styling */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    border-bottom: 2px solid #E0E0E0;
+    gap: 8px !important;
+    border-bottom: 2px solid #E0E0E0 !important;
 }
+
 .stTabs [data-baseweb="tab"] {
-    background-color: #FFFFFF;
-    border: 1px solid #E0E0E0;
-    border-radius: 8px 8px 0px 0px;
-    padding: 10px 18px;
-    color: #555555;
+    background-color: #FFFFFF !important;
+    border: 1px solid #E0E0E0 !important;
+    border-radius: 8px 8px 0px 0px !important;
+    padding: 10px 20px !important;
 }
+
+.stTabs [data-baseweb="tab"] p {
+    color: #555555 !important;
+    font-weight: 600 !important;
+}
+
 .stTabs [aria-selected="true"] {
     border-color: #E1251B !important;
     background-color: #E1251B !important;
 }
+
 .stTabs [aria-selected="true"] p {
     color: #FFFFFF !important;
 }
 
-/* Form, Expander & Cards */
-[data-testid="stForm"], div[data-testid="stExpander"] {
-    background-color: #FFFFFF;
-    border: 1px solid #E0E0E0;
-    border-radius: 12px;
-    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04);
+/* Form, Expander & Container Cards */
+[data-testid="stForm"], div[data-testid="stExpander"], [data-testid="stForm"] > div {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E0E0E0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* Custom Metric Cards */
 .metric-box {
-    background-color: #FFFFFF;
-    border: 1px solid #E0E0E0;
-    border-top: 4px solid #E1251B;
-    border-radius: 10px;
-    padding: 16px;
-    text-align: center;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.03);
+    background-color: #FFFFFF !important;
+    border: 1px solid #E0E0E0 !important;
+    border-top: 4px solid #E1251B !important;
+    border-radius: 10px !important;
+    padding: 16px !important;
+    text-align: center !important;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.03) !important;
 }
+
 .metric-box h4 {
-    margin: 0;
-    font-size: 13px;
-    color: #666666;
-    text-transform: uppercase;
+    margin: 0 !important;
+    font-size: 13px !important;
+    color: #666666 !important;
+    text-transform: uppercase !important;
 }
+
 .metric-box h3 {
-    margin: 6px 0 0 0;
-    font-size: 22px;
-    color: #E1251B;
-    font-weight: 700;
+    margin: 6px 0 0 0 !important;
+    font-size: 22px !important;
+    color: #E1251B !important;
+    font-weight: 700 !important;
 }
 </style>
 """, unsafe_allow_html=True)
