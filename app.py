@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-import json
 import uuid
-from datetime import datetime, date
+from datetime import date
 
 import db
 
@@ -60,7 +59,7 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
 </style>
 """, unsafe_allow_html=True)
 
-# Helper function to convert any Google Slide URL into embed format
+# Helper function to convert Google Slide URL to embed URL
 def format_embed_url(url):
     if not url:
         return ""
@@ -68,8 +67,18 @@ def format_embed_url(url):
         return url.split("/edit")[0] + "/embed"
     elif "/pub" in url:
         return url.split("/pub")[0] + "/embed"
-    elif not url.endswith("/embed"):
+    elif not url.endswith("/embed") and "docs.google.com/presentation" in url:
         return url.rstrip('/') + "/embed"
+    return url
+
+# Helper function for Google Form URLs
+def format_form_url(url):
+    if not url:
+        return ""
+    if "docs.google.com/forms" in url and not url.endswith("embedded=true"):
+        if "?" in url:
+            return url + "&embedded=true"
+        return url + "?embedded=true"
     return url
 
 # Authentication State
@@ -102,69 +111,62 @@ st.title("Pathao Rides — CX Training Portal")
 
 if is_admin_view:
     admin_tab1, admin_tab2, admin_tab3 = st.tabs([
-        "📊 Topic & Google Slide Manager", 
+        "📊 Topic, Slide & Form Manager", 
         "📅 Induction Performance Dashboard", 
         "🔁 Refresher Training"
     ])
     
-    # 1. TOPIC & SLIDE MANAGER
+    # 1. TOPIC & FORM MANAGER
     with admin_tab1:
-        st.header("Topic & Google Slides Management System")
-        st.caption("The 8 primary topics are automatically pre-loaded below. You can add more or manage existing ones.")
+        st.header("Topic, Google Slides & Quiz Form Manager")
+        st.caption("Default 8 topics are already configured. You can update or add quiz form links to them.")
         
-        with st.expander("➕ Add Additional Training Topic", expanded=False):
+        with st.expander("➕ Add / Edit Training Topic & Forms", expanded=False):
             with st.form("new_topic_form"):
                 c1, c2, c3 = st.columns([2, 1, 1])
                 t_name = c1.text_input("Topic Name *")
                 t_duration = c2.text_input("Duration *")
                 t_trainer = c3.text_input("Assigned Trainer Name")
                 
-                slide_url = st.text_input("Google Slides URL *", placeholder="https://docs.google.com/presentation/d/.../edit")
-                
-                st.divider()
-                passing_mark = st.number_input("Passing Score (%)", min_value=0, max_value=100, value=80)
+                slide_url = st.text_input("Google Slides Link *", placeholder="https://docs.google.com/presentation/d/.../edit")
+                form_url = st.text_input("Quiz Form Link (Google Form / Typeform)", placeholder="https://docs.google.com/forms/d/e/.../viewform")
                 
                 if st.form_submit_button("💾 Save Topic"):
                     if not t_name or not slide_url:
-                        st.error("Topic Name and Slide URL required!")
+                        st.error("Topic Name and Slide URL are required!")
                     else:
                         db.upsert_topic({
                             "id": str(uuid.uuid4()), 
                             "name": t_name.strip(), 
                             "duration": t_duration.strip(),
                             "trainer_name": t_trainer.strip(), 
-                            "quiz_passing_mark": int(passing_mark),
-                            "quiz_questions": json.dumps([]), 
-                            "slide_url": format_embed_url(slide_url.strip())
+                            "slide_url": format_embed_url(slide_url.strip()),
+                            "form_url": format_form_url(form_url.strip())
                         })
-                        st.success("Topic Saved Successfully!")
+                        st.success("Topic & Form Link Saved Successfully!")
                         st.rerun()
 
-        st.subheader("Active Topics in System")
+        st.subheader("Current Topics in Database")
         topics_list = db.get_topics()
         for top in topics_list:
             with st.container(border=True):
                 col_t1, col_t2 = st.columns([4, 1])
                 col_t1.markdown(f"### 📊 {top.get('name')}")
-                col_t1.caption(f"⏱️ Duration: {top.get('duration')} | 👤 Trainer: {top.get('trainer_name')} | 🔗 Embed Link: {format_embed_url(top.get('slide_url'))}")
+                col_t1.caption(f"⏱️ Duration: {top.get('duration')} | 👤 Trainer: {top.get('trainer_name')}")
+                col_t1.caption(f"📺 Slide: {top.get('slide_url')}")
+                col_t1.caption(f"📝 Quiz Form: {top.get('form_url') or 'Not Added Yet'}")
                 if col_t2.button("🗑️ Delete", key=f"del_{top['id']}"):
                     db.delete_topic(top['id'])
                     st.rerun()
 
     # 2. INDUCTION DASHBOARD
     with admin_tab2:
-        st.header("📊 Induction Training Performance & Health Check")
+        st.header("📊 Induction Training Performance Dashboard")
         raw_data = db.get_induction_activities()
         if not raw_data:
             st.info("No Induction Activity Records Found yet.")
         else:
             df = pd.DataFrame(raw_data)
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("⏱️ Total Hours", f"{df['hours_spent'].sum():.1f} hrs")
-            m2.metric("🎯 Avg Quiz Score", f"{df['quiz_score'].mean():.1f}%")
-            m3.metric("✅ Passed Agents", f"{len(df[df['status'] == 'Passed']['agent_id'].unique())}")
-            m4.metric("📈 Total Activities", len(df))
-            st.divider()
             st.dataframe(df, use_container_width=True)
 
     # 3. REFRESHER TRAINING
@@ -200,7 +202,7 @@ if is_admin_view:
 else:
     # AGENT WORKSPACE PORTAL
     st.header("Agent Self-Service Hub")
-    agent_tab1, agent_tab2 = st.tabs(["📖 Study Topics & Google Slides", "🔁 Request Refresher Session"])
+    agent_tab1, agent_tab2 = st.tabs(["📖 Study Topics & Take Quiz", "🔁 Request Refresher Session"])
     
     with agent_tab1:
         all_topics = db.get_topics()
@@ -220,7 +222,7 @@ else:
                             <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
                         </div>
                         """, unsafe_allow_html=True)
-                        if st.button(f"Open Presentation ➔", key=f"btn_card_{topic['id']}"):
+                        if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
                             st.session_state.selected_topic_id = topic['id']
                             st.rerun()
                         st.write("")
@@ -234,14 +236,22 @@ else:
                     st.markdown(f"## 📊 Topic: **{selected_topic['name']}**")
                     st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
                     
-                    raw_slide = selected_topic.get("slide_url", "")
-                    embed_link = format_embed_url(raw_slide)
+                    # Nested Tabs for Slide Presentation and Form Embed
+                    content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Take Quiz Form"])
                     
-                    if embed_link:
-                        st.markdown("#### 📺 Interactive Google Slide Presentation")
-                        st.components.v1.iframe(embed_link, height=560, scrolling=False)
-                    else:
-                        st.warning("No Presentation link attached to this topic.")
+                    with content_tab1:
+                        embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
+                        if embed_slide:
+                            st.components.v1.iframe(embed_slide, height=560, scrolling=False)
+                        else:
+                            st.warning("No Slide Presentation available.")
+                            
+                    with content_tab2:
+                        embed_form = format_form_url(selected_topic.get("form_url", ""))
+                        if embed_form:
+                            st.components.v1.iframe(embed_form, height=700, scrolling=True)
+                        else:
+                            st.info("No Quiz Form link added for this topic yet. Admin can attach a Google Form link from Admin View.")
 
     with agent_tab2:
         st.subheader("🔁 Request Refresher Session")
