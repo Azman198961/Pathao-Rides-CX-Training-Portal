@@ -41,7 +41,7 @@ h1, h2, h3 {
 
 /* Sidebar Styling & Text Fix */
 [data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
     border-right: 1px solid #E0E0E0 !important;
 }
 
@@ -51,14 +51,14 @@ h1, h2, h3 {
 
 /* Input Fields & Text Areas */
 div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="textarea"] {
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
     border: 1px solid #CCCCCC !important;
     border-radius: 8px !important;
 }
 
 div[data-baseweb="base-input"] input, div[data-baseweb="select"] * {
     color: #111111 !important;
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
 }
 
 /* Input Labels */
@@ -71,7 +71,7 @@ label[data-testid="stWidgetLabel"] p {
 .stButton>button {
     background-color: #E1251B !important;
     border: none !important;
-    color: #FFFFFF !important;
+    color: #F4F3EF !important;
     border-radius: 8px !important;
     font-weight: 600 !important;
     padding: 10px 16px !important;
@@ -79,12 +79,12 @@ label[data-testid="stWidgetLabel"] p {
 }
 
 .stButton>button * {
-    color: #FFFFFF !important;
+    color: #F4F3EF !important;
 }
 
 .stButton>button:hover {
     background-color: #B81C14 !important;
-    color: #FFFFFF !important;
+    color: #F4F3EF !important;
     box-shadow: 0px 4px 12px rgba(225, 37, 27, 0.25) !important;
 }
 
@@ -95,7 +95,7 @@ label[data-testid="stWidgetLabel"] p {
 }
 
 .stTabs [data-baseweb="tab"] {
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
     border: 1px solid #E0E0E0 !important;
     border-radius: 8px 8px 0px 0px !important;
     padding: 10px 20px !important;
@@ -112,12 +112,12 @@ label[data-testid="stWidgetLabel"] p {
 }
 
 .stTabs [aria-selected="true"] p {
-    color: #FFFFFF !important;
+    color: #F4F3EF !important;
 }
 
 /* Form, Expander & Container Cards */
 [data-testid="stForm"], div[data-testid="stExpander"], [data-testid="stForm"] > div {
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
     border: 1px solid #E0E0E0 !important;
     border-radius: 12px !important;
     box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04) !important;
@@ -125,7 +125,7 @@ label[data-testid="stWidgetLabel"] p {
 
 /* Custom Metric Cards */
 .metric-box {
-    background-color: #FFFFFF !important;
+    background-color: #F4F3EF !important;
     border: 1px solid #E0E0E0 !important;
     border-top: 4px solid #E1251B !important;
     border-radius: 10px !important;
