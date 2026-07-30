@@ -21,7 +21,7 @@ def init_db():
         trainer_name TEXT,
         quiz_passing_mark INTEGER,
         quiz_questions TEXT,
-        site_url TEXT
+        slide_url TEXT
     )
     """)
 
@@ -40,7 +40,7 @@ def init_db():
     )
     """)
 
-    # 3. Induction Activity & Health Track Table
+    # 3. Induction Activity Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS induction_activities (
         id TEXT PRIMARY KEY,
@@ -51,26 +51,28 @@ def init_db():
         topic_name TEXT,
         hours_spent REAL,
         quiz_score INTEGER,
-        status TEXT, -- Passed, Failed, In Progress
+        status TEXT,
         activity_date TEXT
     )
     """)
 
-    # Sample Data for Induction Performance Testing (If empty)
-    cursor.execute("SELECT COUNT(*) FROM induction_activities")
+    # Default Topics Auto-Insertion (যদি টেবিল খালি থাকে)
+    cursor.execute("SELECT COUNT(*) FROM topics")
     if cursor.fetchone()[0] == 0:
-        sample_activities = [
-            ('1', 'EMP101', 'Rahim Ahmed', 'Inbound Voice', 't1', 'Rider Joining Process', 3.5, 85, 'Passed', '2026-03-25'),
-            ('2', 'EMP102', 'Karim Ullah', 'Live Chat', 't2', 'Fare Information', 2.0, 60, 'Failed', '2026-03-26'),
-            ('3', 'EMP103', 'Sultana Razia', 'Inbound Voice', 't1', 'Rider Joining Process', 4.0, 95, 'Passed', '2026-03-27'),
-            ('4', 'EMP104', 'Tanvir Hasan', 'Complaint Management', 't3', 'SOPs & Internal Tools', 1.5, 40, 'Failed', '2026-03-28'),
-            ('5', 'EMP101', 'Rahim Ahmed', 'Inbound Voice', 't3', 'SOPs & Internal Tools', 2.5, 90, 'Passed', '2026-03-28')
+        default_topics = [
+            ("top_1", "Fare Information", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed"),
+            ("top_2", "Joining Process", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed"),
+            ("top_3", "Star Program", "30 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1SbNxrXajQlZIpT6fvT_a9bXwmIhl1dQZh2olZ0s8lMI/embed"),
+            ("top_4", "Payment", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1Q9ous8zu6CmPe2Yw8oTKS-FkPKHUOHPT/embed"),
+            ("top_5", "User SOP", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1TCkGIRTbQ87ZmW8vZM4WS2nN237GzQWi/embed"),
+            ("top_6", "Rider SOP", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1A28xX9YdsEuHOIGEPfEigQ6C_azRmNap/embed"),
+            ("top_7", "QA Parameters", "45 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1IT7U4N88rSaHSsbVPqY5K03kfKA3iddW98VT9lsPLVM/embed"),
+            ("top_8", "Pathao Internal Tools", "60 mins", "CMT Team", 80, "[]", "https://docs.google.com/presentation/d/1UZQiOydwqm9etUb8MzEDXwGHbLipc30O/embed")
         ]
         cursor.executemany("""
-            INSERT INTO induction_activities 
-            (id, agent_id, agent_name, channel, topic_id, topic_name, hours_spent, quiz_score, status, activity_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, sample_activities)
+            INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, slide_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, default_topics)
 
     conn.commit()
     conn.close()
@@ -79,7 +81,7 @@ def upsert_topic(data):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, site_url)
+        INSERT INTO topics (id, name, duration, trainer_name, quiz_passing_mark, quiz_questions, slide_url)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
@@ -87,8 +89,8 @@ def upsert_topic(data):
             trainer_name=excluded.trainer_name,
             quiz_passing_mark=excluded.quiz_passing_mark,
             quiz_questions=excluded.quiz_questions,
-            site_url=excluded.site_url
-    """, (data['id'], data['name'], data['duration'], data['trainer_name'], data['quiz_passing_mark'], data['quiz_questions'], data['site_url']))
+            slide_url=excluded.slide_url
+    """, (data['id'], data['name'], data['duration'], data['trainer_name'], data['quiz_passing_mark'], data['quiz_questions'], data['slide_url']))
     conn.commit()
     conn.close()
 
