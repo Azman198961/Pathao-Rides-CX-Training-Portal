@@ -8,7 +8,7 @@ import db
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🎓", layout="wide")
 db.init_db()
 
-# Custom Styling
+# Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -59,7 +59,7 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
 </style>
 """, unsafe_allow_html=True)
 
-# Helper function to convert Google Slide URL to embed URL
+# URL formatters
 def format_embed_url(url):
     if not url:
         return ""
@@ -71,7 +71,6 @@ def format_embed_url(url):
         return url.rstrip('/') + "/embed"
     return url
 
-# Helper function for Google Form URLs
 def format_form_url(url):
     if not url:
         return ""
@@ -81,7 +80,7 @@ def format_form_url(url):
         return url + "?embedded=true"
     return url
 
-# Authentication State
+# Auth State
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
@@ -110,67 +109,155 @@ is_admin_view = (role == "Admin View" and st.session_state.is_admin)
 st.title("Pathao Rides — CX Training Portal")
 
 if is_admin_view:
-    admin_tab1, admin_tab2, admin_tab3 = st.tabs([
-        "📊 Topic, Slide & Form Manager", 
-        "📅 Induction Performance Dashboard", 
-        "🔁 Refresher Training"
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
+        "👥 Agent Information", 
+        "📊 Topics & Quiz Editor", 
+        "📅 Induction Calendar", 
+        "📝 Agent Evaluation", 
+        "🔁 Refresher Requests"
     ])
     
-    # 1. TOPIC & FORM MANAGER
+    # 1. AGENT INFORMATION DIRECTORY
     with admin_tab1:
-        st.header("Topic, Google Slides & Quiz Form Manager")
-        st.caption("Default 8 topics are already configured. You can update or add quiz form links to them.")
+        st.header("👥 Induction Agent Information Directory")
+        st.caption("Add and manage agent info: Name, EMP ID, Email, and Phone Number.")
         
-        with st.expander("➕ Add / Edit Training Topic & Forms", expanded=False):
-            with st.form("new_topic_form"):
-                c1, c2, c3 = st.columns([2, 1, 1])
-                t_name = c1.text_input("Topic Name *")
-                t_duration = c2.text_input("Duration *")
-                t_trainer = c3.text_input("Assigned Trainer Name")
+        with st.expander("➕ Add / Edit Agent Record", expanded=False):
+            with st.form("agent_info_form"):
+                col1, col2 = st.columns(2)
+                ag_id = col1.text_input("EMP ID *")
+                ag_name = col2.text_input("Agent Name *")
+                col3, col4 = st.columns(2)
+                ag_email = col3.text_input("Email Address *")
+                ag_phone = col4.text_input("Phone Number *")
                 
-                slide_url = st.text_input("Google Slides Link *", placeholder="https://docs.google.com/presentation/d/.../edit")
-                form_url = st.text_input("Quiz Form Link (Google Form / Typeform)", placeholder="https://docs.google.com/forms/d/e/.../viewform")
-                
-                if st.form_submit_button("💾 Save Topic"):
-                    if not t_name or not slide_url:
-                        st.error("Topic Name and Slide URL are required!")
+                if st.form_submit_button("💾 Save Agent"):
+                    if not ag_id or not ag_name or not ag_email:
+                        st.error("EMP ID, Name, and Email are mandatory!")
                     else:
-                        db.upsert_topic({
-                            "id": str(uuid.uuid4()), 
-                            "name": t_name.strip(), 
-                            "duration": t_duration.strip(),
-                            "trainer_name": t_trainer.strip(), 
-                            "slide_url": format_embed_url(slide_url.strip()),
-                            "form_url": format_form_url(form_url.strip())
-                        })
-                        st.success("Topic & Form Link Saved Successfully!")
+                        db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
+                        st.success("Agent Info saved successfully!")
                         st.rerun()
 
-        st.subheader("Current Topics in Database")
-        topics_list = db.get_topics()
-        for top in topics_list:
-            with st.container(border=True):
-                col_t1, col_t2 = st.columns([4, 1])
-                col_t1.markdown(f"### 📊 {top.get('name')}")
-                col_t1.caption(f"⏱️ Duration: {top.get('duration')} | 👤 Trainer: {top.get('trainer_name')}")
-                col_t1.caption(f"📺 Slide: {top.get('slide_url')}")
-                col_t1.caption(f"📝 Quiz Form: {top.get('form_url') or 'Not Added Yet'}")
-                if col_t2.button("🗑️ Delete", key=f"del_{top['id']}"):
-                    db.delete_topic(top['id'])
+        st.subheader("Registered Agents List")
+        agents = db.get_agents()
+        if not agents:
+            st.info("No Agents registered yet.")
+        else:
+            df_ag = pd.DataFrame(agents)
+            st.dataframe(df_ag, use_container_width=True)
+            for ag in agents:
+                if st.button(f"🗑️ Delete Agent {ag['name']} ({ag['empid']})", key=f"del_ag_{ag['empid']}"):
+                    db.delete_agent(ag['empid'])
                     st.rerun()
 
-    # 2. INDUCTION DASHBOARD
+    # 2. TOPICS & QUIZ FORM EDITOR
     with admin_tab2:
-        st.header("📊 Induction Training Performance Dashboard")
-        raw_data = db.get_induction_activities()
-        if not raw_data:
-            st.info("No Induction Activity Records Found yet.")
-        else:
-            df = pd.DataFrame(raw_data)
-            st.dataframe(df, use_container_width=True)
+        st.header("📊 Topics, Time & Quiz Form Link Manager")
+        st.caption("Update Topic Duration (Time) or Google Form Links for existing modules.")
+        
+        topics_list = db.get_topics()
+        for top in topics_list:
+            with st.expander(f"⚙️ Edit Module: **{top['name']}**", expanded=False):
+                with st.form(f"edit_top_form_{top['id']}"):
+                    c1, c2 = st.columns(2)
+                    new_time = c1.text_input("Duration / Time *", value=top.get('duration', ''), key=f"time_{top['id']}")
+                    new_trainer = c2.text_input("Trainer Name *", value=top.get('trainer_name', 'Md Asikul islam Azman'), key=f"tr_{top['id']}")
+                    
+                    new_slide = st.text_input("Google Slide Link", value=top.get('slide_url', ''), key=f"slide_{top['id']}")
+                    new_form = st.text_input("Quiz Form Link (Google Form / Typeform)", value=top.get('form_url', ''), key=f"form_{top['id']}")
+                    
+                    if st.form_submit_button("💾 Update Topic Details"):
+                        db.upsert_topic({
+                            "id": top['id'],
+                            "name": top['name'],
+                            "duration": new_time.strip(),
+                            "trainer_name": new_trainer.strip(),
+                            "slide_url": format_embed_url(new_slide.strip()),
+                            "form_url": format_form_url(new_form.strip())
+                        })
+                        st.success(f"Topic '{top['name']}' updated!")
+                        st.rerun()
 
-    # 3. REFRESHER TRAINING
+    # 3. INDUCTION CALENDAR
     with admin_tab3:
+        st.header("📅 Induction Training Calendar & Task Allocator")
+        st.caption("Allocate topics and custom tasks into training dates.")
+        
+        with st.expander("➕ Add Calendar Schedule / Task", expanded=False):
+            with st.form("cal_form"):
+                col_d, col_t = st.columns(2)
+                ev_date = col_d.date_input("Event Date", value=date.today())
+                ev_time = col_t.text_input("Time Slot (e.g., 10:00 AM - 12:00 PM)", value="10:00 AM - 11:30 AM")
+                
+                ev_type = st.selectbox("Type", ["Topic Session", "Quiz / Exam", "Live Communication", "Other Task / Meeting"])
+                
+                t_names = [t["name"] for t in db.get_topics()]
+                if ev_type == "Topic Session":
+                    ev_title = st.selectbox("Select Topic", t_names)
+                else:
+                    ev_title = st.text_input("Task / Event Title *")
+                
+                ev_details = st.text_area("Details / Notes")
+                
+                if st.form_submit_button("📌 Add to Calendar"):
+                    if not ev_title:
+                        st.error("Title required!")
+                    else:
+                        db.insert_calendar_event(str(uuid.uuid4()), ev_date.strftime("%Y-%m-%d"), ev_time, ev_title, ev_type, ev_details)
+                        st.success("Calendar Schedule Added!")
+                        st.rerun()
+
+        st.subheader("Upcoming Schedules & Tasks")
+        events = db.get_calendar_events()
+        if not events:
+            st.info("No schedule allocated yet.")
+        else:
+            for ev in events:
+                with st.container(border=True):
+                    ce1, ce2 = st.columns([4, 1])
+                    ce1.markdown(f"### 🗓️ `{ev['event_date']}` | ⏰ `{ev['event_time']}`")
+                    ce1.markdown(f"**[{ev['event_type']}]** **{ev['title']}**")
+                    if ev['details']:
+                        ce1.caption(f"📝 Notes: {ev['details']}")
+                    if ce2.button("🗑️ Remove", key=f"del_ev_{ev['id']}"):
+                        db.delete_calendar_event(ev['id'])
+                        st.rerun()
+
+    # 4. AGENT EVALUATION SYSTEM
+    with admin_tab4:
+        st.header("📝 Induction Agent Evaluation System")
+        st.caption("Input & track score evaluation for agents enrolled in induction.")
+        
+        evals = db.get_evaluations()
+        if not evals:
+            st.warning("No Agents found in directory. Please add agents in the 'Agent Information' tab first.")
+        else:
+            st.subheader("Agent Score Card Sheet")
+            for ev in evals:
+                with st.expander(f"👤 Agent: **{ev['agent_name']}** (EMP ID: `{ev['empid']}`)", expanded=True):
+                    with st.form(f"eval_form_{ev['empid']}"):
+                        c1, c2, c3, c4 = st.columns(4)
+                        q1 = c1.number_input("Quiz 1 Score", min_value=0.0, max_value=100.0, value=float(ev['quiz1']), key=f"q1_{ev['empid']}")
+                        q2 = c2.number_input("Quiz 2 Score", min_value=0.0, max_value=100.0, value=float(ev['quiz2']), key=f"q2_{ev['empid']}")
+                        q3 = c3.number_input("Quiz 3 Score", min_value=0.0, max_value=100.0, value=float(ev['quiz3']), key=f"q3_{ev['empid']}")
+                        ass = c4.number_input("Assignment", min_value=0.0, max_value=100.0, value=float(ev['assignment']), key=f"ass_{ev['empid']}")
+                        
+                        c5, c6, c7 = st.columns(3)
+                        mock = c5.number_input("Mock Call Score", min_value=0.0, max_value=100.0, value=float(ev['mock_call']), key=f"mock_{ev['empid']}")
+                        live = c6.number_input("Live Communication", min_value=0.0, max_value=100.0, value=float(ev['live_comm']), key=f"live_{ev['empid']}")
+                        
+                        # Auto-Calculated Final Score Suggestion
+                        suggested_avg = round((q1 + q2 + q3 + ass + mock + live) / 6, 2)
+                        final_sc = c7.number_input("Final Score", min_value=0.0, max_value=100.0, value=float(ev['final_score'] or suggested_avg), key=f"fin_{ev['empid']}")
+                        
+                        if st.form_submit_button("💾 Save Score Evaluation"):
+                            db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, final_sc)
+                            st.success(f"Scores saved for {ev['agent_name']}!")
+                            st.rerun()
+
+    # 5. REFRESHER REQUESTS
+    with admin_tab5:
         st.header("🔁 Refresher Training Requests Management")
         all_requests = db.get_refresher_requests()
         if not all_requests:
@@ -219,7 +306,7 @@ else:
                         <div class="topic-card-box">
                             <h3>📊 {topic['name']}</h3>
                             <p style="color: #a0a0a0; margin-bottom: 5px;">⏱️ Duration: <b>{topic['duration']}</b></p>
-                            <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'N/A')}</b></p>
+                            <p style="color: #a0a0a0;">👤 Trainer: <b>{topic.get('trainer_name', 'Md Asikul islam Azman')}</b></p>
                         </div>
                         """, unsafe_allow_html=True)
                         if st.button(f"Open Module ➔", key=f"btn_card_{topic['id']}"):
@@ -234,9 +321,8 @@ else:
                         st.rerun()
                     
                     st.markdown(f"## 📊 Topic: **{selected_topic['name']}**")
-                    st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'N/A')}")
+                    st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'Md Asikul islam Azman')}")
                     
-                    # Nested Tabs for Slide Presentation and Form Embed
                     content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Take Quiz Form"])
                     
                     with content_tab1:
