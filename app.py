@@ -96,8 +96,8 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 with st.sidebar:
-    st.title("🔴 Pathao CX")
-    st.caption("Rides Department CMT")
+    st.title("🔴 Pathao")
+    st.caption("Rides CX")
     st.divider()
     role = st.radio("Access Level:", ["Agent View", "Admin View"])
     
