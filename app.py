@@ -172,10 +172,10 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
 
-    # 3. INDUCTION CALENDAR PLANNER (PERIOD-BASED)
+    # 3. INDUCTION CALENDAR PLANNER (MULTI-SLOT PER DAY)
     with admin_tab3:
         st.header("📅 Induction Training Period Calendar Planner")
-        st.caption("Select Date Range, configure daily topics/time/off-days, and publish to Google Sheet.")
+        st.caption("Select Date Range, add multiple time slots/topics per day, or mark Day Off.")
         
         # Step 1: Period Selection
         with st.form("period_select_form"):
@@ -190,14 +190,22 @@ if is_admin_view:
             if date_from > date_to:
                 st.error("'Date From' cannot be later than 'Date To'!")
             else:
-                # Generate date list
                 num_days = (date_to - date_from).days + 1
-                dates_list = [date_from + timedelta(days=i) for i in range(num_days)]
+                dates_list = [(date_from + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(num_days)]
+                
+                # Initialize day slots dictionary if new
+                day_slots = {}
+                for d in dates_list:
+                    day_slots[d] = [
+                        {"type": "Topic Session", "topic": "", "custom": "", "time": "10:00 AM - 01:00 PM", "trainer": "Md Asikul islam Azman", "off": False}
+                    ]
+                
                 st.session_state.current_planner = {
                     "batch": batch_title,
                     "from": date_from.strftime("%Y-%m-%d"),
                     "to": date_to.strftime("%Y-%m-%d"),
-                    "dates": [d.strftime("%Y-%m-%d") for d in dates_list]
+                    "dates": dates_list,
+                    "day_slots": day_slots
                 }
 
         planner_data = st.session_state.get("current_planner", None)
@@ -209,88 +217,91 @@ if is_admin_view:
             topics_db = db.get_topics()
             topic_names = ["-- Select Topic --"] + [t['name'] for t in topics_db]
             
-            # Step 2: Day-wise Configuration Form
-            schedule_entries = []
-            
-            # Webhook URL Input for Google Sheets Auto-Submit
-            webhook_url = st.text_input("🔗 Google Sheet Webhook URL (Apps Script / Zapier / Make)", 
-                                        placeholder="https://script.google.com/macros/s/.../exec",
-                                        help="Paste your Google Apps Script Webhook URL to automatically append rows to Google Sheets.")
-            
-            with st.form("daywise_schedule_form"):
-                for idx, d_str in enumerate(planner_data["dates"]):
-                    dt_obj = date.fromisoformat(d_str)
-                    day_name = dt_obj.strftime("%A")
+            webhook_url = st.text_input("🔗 Google Sheet Webhook URL (Apps Script / Webhook)", 
+                                        placeholder="https://script.google.com/macros/s/.../exec")
+
+            full_schedule_output = []
+
+            # Loop through days
+            for idx, d_str in enumerate(planner_data["dates"]):
+                dt_obj = date.fromisoformat(d_str)
+                day_name = dt_obj.strftime("%A")
+                
+                st.markdown(f"### 🗓️ Day {idx+1}: `{d_str}` ({day_name})")
+                
+                # Check Day Off toggle for whole day
+                is_day_off = st.checkbox(f"🔴 Mark Entire Day as DAY OFF", key=f"off_day_{d_str}")
+                
+                if is_day_off:
+                    st.info("This day is marked as Day Off.")
+                    full_schedule_output.append({
+                        "Date": d_str,
+                        "Day": day_name,
+                        "Activity / Topic": "DAY OFF",
+                        "Time Slot": "N/A",
+                        "Trainer": "N/A",
+                        "Status": "Day Off"
+                    })
+                else:
+                    slots = planner_data["day_slots"].get(d_str, [])
                     
-                    st.markdown(f"#### 🗓️ Day {idx+1}: `{d_str}` ({day_name})")
-                    
-                    c1, c2, c3, c4 = st.columns([1.5, 2, 2, 2])
-                    is_off = c1.checkbox("🔴 Day Off", key=f"off_{d_str}")
-                    
-                    if is_off:
-                        c2.text_input("Activity", value="DAY OFF / REST DAY", disabled=True, key=f"act_{d_str}")
-                        c3.text_input("Time Slot", value="N/A", disabled=True, key=f"time_{d_str}")
-                        c4.text_input("Trainer", value="N/A", disabled=True, key=f"tr_{d_str}")
+                    for s_idx, slot in enumerate(slots):
+                        st.markdown(f"**Slot #{s_idx+1}**")
+                        c1, c2, c3, c4 = st.columns([1.5, 2, 2, 0.5])
                         
-                        schedule_entries.append({
-                            "Date": d_str,
-                            "Day": day_name,
-                            "Activity / Topic": "DAY OFF",
-                            "Time Slot": "N/A",
-                            "Trainer": "N/A",
-                            "Status": "Day Off"
-                        })
-                    else:
-                        activity_type = c2.selectbox("Activity Type", ["Topic Session", "Other Task / Exam / Mock Call"], key=f"atype_{d_str}")
+                        st_type = c1.selectbox("Activity Type", ["Topic Session", "Other Task / Exam / Mock Call"], key=f"type_{d_str}_{s_idx}")
                         
-                        if activity_type == "Topic Session":
-                            sel_topic = c2.selectbox("Select Topic", topic_names, key=f"top_{d_str}")
-                            act_val = sel_topic if sel_topic != "-- Select Topic --" else "Custom Session"
+                        if st_type == "Topic Session":
+                            st_topic = c2.selectbox("Select Topic", topic_names, key=f"top_{d_str}_{s_idx}")
+                            act_title = st_topic if st_topic != "-- Select Topic --" else "Topic Session"
                         else:
-                            act_val = c2.text_input("Task Title", value="Mock Call & Feedback", key=f"custom_{d_str}")
+                            act_title = c2.text_input("Task / Exam Title", value="Mock Call & Feedback", key=f"cust_{d_str}_{s_idx}")
                             
-                        t_slot = c3.text_input("Time Slot", value="10:00 AM - 01:00 PM", key=f"tslot_{d_str}")
-                        tr_name = c4.text_input("Trainer Name", value="Md Asikul islam Azman", key=f"trname_{d_str}")
+                        st_time = c3.text_input("Time Slot", value=slot.get("time", "10:00 AM - 01:00 PM"), key=f"time_{d_str}_{s_idx}")
+                        st_trainer = c3.text_input("Trainer Name", value=slot.get("trainer", "Md Asikul islam Azman"), key=f"tr_{d_str}_{s_idx}")
                         
-                        schedule_entries.append({
+                        if c4.button("🗑️", key=f"del_slot_{d_str}_{s_idx}"):
+                            planner_data["day_slots"][d_str].pop(s_idx)
+                            st.rerun()
+
+                        full_schedule_output.append({
                             "Date": d_str,
                             "Day": day_name,
-                            "Activity / Topic": act_val,
-                            "Time Slot": t_slot,
-                            "Trainer": tr_name,
+                            "Activity / Topic": act_title,
+                            "Time Slot": st_time,
+                            "Trainer": st_trainer,
                             "Status": "Scheduled"
                         })
-                    st.divider()
 
-                # Step 3: Publish Calendar Button
-                publish_btn = st.form_submit_button("🚀 Publish Training Calendar to Google Sheet")
+                    # Button to Add Extra Slot in the same day
+                    if st.button(f"➕ Add Another Slot for {d_str}", key=f"add_slot_{d_str}"):
+                        planner_data["day_slots"][d_str].append({
+                            "type": "Topic Session", "topic": "", "custom": "", "time": "02:00 PM - 05:00 PM", "trainer": "Md Asikul islam Azman", "off": False
+                        })
+                        st.rerun()
 
-            if publish_btn:
-                # Save locally in DB
+                st.divider()
+
+            # Publish Calendar Button
+            if st.button("🚀 Publish Training Calendar to Google Sheet", type="primary"):
                 sched_id = str(uuid.uuid4())
-                json_str = json.dumps(schedule_entries)
+                json_str = json.dumps(full_schedule_output)
                 db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json_str, "Published")
                 
-                st.success("✅ Training Calendar saved to Database successfully!")
+                st.success("✅ Multi-slot Training Calendar saved successfully!")
                 
-                # Auto Webhook Trigger for Google Sheets
                 if webhook_url:
                     try:
                         resp = requests.post(webhook_url, json={
                             "batch": planner_data['batch'],
-                            "schedule": schedule_entries
+                            "schedule": full_schedule_output
                         }, timeout=10)
-                        if resp.status_status in [200, 201]:
-                            st.success("📊 Automatically exported to your Google Sheet successfully!")
-                        else:
-                            st.warning(f"Webhook responded with code: {resp.status_code}")
+                        if resp.status_code in [200, 201]:
+                            st.success("📊 Exported to Google Sheet successfully!")
                     except Exception as e:
-                        st.error(f"Error submitting to Google Sheet Webhook: {e}")
-                else:
-                    st.info("💡 Pro Tip: Attach a Google Apps Script Webhook URL above for direct 1-click sync. You can also download the CSV below to paste directly into Google Sheets.")
+                        st.error(f"Error posting to Webhook: {e}")
 
-                # Downloadable CSV for direct Google Sheet Paste
-                df_export = pd.DataFrame(schedule_entries)
+                df_export = pd.DataFrame(full_schedule_output)
                 st.dataframe(df_export, use_container_width=True)
                 csv = df_export.to_csv(index=False).encode('utf-8')
                 st.download_button(
@@ -316,8 +327,6 @@ if is_admin_view:
     # 4. AGENT EVALUATION SYSTEM
     with admin_tab4:
         st.header("📝 Induction Agent Evaluation System")
-        st.caption("Input & track score evaluation for agents enrolled in induction.")
-        
         evals = db.get_evaluations()
         if not evals:
             st.warning("No Agents found in directory. Please add agents in the 'Agent Information' tab first.")
