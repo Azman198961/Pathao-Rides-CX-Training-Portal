@@ -49,15 +49,15 @@ def init_db():
     )
     """)
 
-    # 4. Training Calendar Table
+    # 4. Range-Based Calendar Schedule Table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS calendar_events (
+    CREATE TABLE IF NOT EXISTS batch_calendar_schedules (
         id TEXT PRIMARY KEY,
-        event_date TEXT,
-        event_time TEXT,
-        title TEXT,
-        event_type TEXT,
-        details TEXT
+        batch_name TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        schedule_json TEXT,
+        status TEXT DEFAULT 'Draft'
     )
     """)
 
@@ -76,7 +76,7 @@ def init_db():
     )
     """)
 
-    # Default Topics Auto-Insertion
+    # Default Topics Insertion
     cursor.execute("SELECT COUNT(*) FROM topics")
     if cursor.fetchone()[0] == 0:
         default_topics = [
@@ -166,29 +166,35 @@ def delete_agent(empid):
     conn.commit()
     conn.close()
 
-# Calendar Functions
-def insert_calendar_event(event_id, e_date, e_time, title, e_type, details):
+# Batch Calendar Schedule Functions
+def save_batch_schedule(sched_id, batch_name, start_date, end_date, schedule_json, status="Published"):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO calendar_events (id, event_date, event_time, title, event_type, details)
+        INSERT INTO batch_calendar_schedules (id, batch_name, start_date, end_date, schedule_json, status)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (event_id, e_date, e_time, title, e_type, details))
+        ON CONFLICT(id) DO UPDATE SET
+            batch_name=excluded.batch_name,
+            start_date=excluded.start_date,
+            end_date=excluded.end_date,
+            schedule_json=excluded.schedule_json,
+            status=excluded.status
+    """, (sched_id, batch_name, start_date, end_date, schedule_json, status))
     conn.commit()
     conn.close()
 
-def get_calendar_events():
+def get_batch_schedules():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM calendar_events ORDER BY event_date ASC, event_time ASC")
+    cursor.execute("SELECT * FROM batch_calendar_schedules ORDER BY start_date DESC")
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
-def delete_calendar_event(event_id):
+def delete_batch_schedule(sched_id):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
+    cursor.execute("DELETE FROM batch_calendar_schedules WHERE id = ?", (sched_id,))
     conn.commit()
     conn.close()
 
