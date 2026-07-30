@@ -150,7 +150,7 @@ with st.sidebar:
     if role == "Admin View" and not st.session_state.is_admin:
         pw = st.text_input("Enter Admin Password", type="password")
         if st.button("Authorize"):
-            if pw == st.secrets.get("admin_password", "changeme123"):
+            if pw == st.secrets.get("admin_password", "123456"):
                 st.session_state.is_admin = True
                 st.rerun()
             else:
