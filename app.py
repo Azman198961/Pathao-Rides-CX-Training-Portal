@@ -4,13 +4,20 @@ import uuid
 import json
 import requests
 from datetime import date, timedelta
+from io import BytesIO
+
+# ReportLab Library for PDF Generation
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🎓", layout="wide")
 db.init_db()
 
-# Custom CSS Styling
+# Custom Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -54,6 +61,13 @@ h1, h2, h3, .stTabs [data-baseweb="tab"] p {
     transition: all 0.3s ease;
     height: 100%;
 }
+.metric-box {
+    background-color: #182420;
+    border: 1px solid #2A3A34;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,6 +86,70 @@ def format_form_url(url):
         if "?" in url: return url + "&embedded=true"
         return url + "?embedded=true"
     return url
+
+def generate_pdf_report(batch_info, covered_topics, df_evals):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#FF7A45'), spaceAfter=10)
+    sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=15)
+    heading_style = ParagraphStyle('HeadStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1F2E28'), spaceAfter=8)
+
+    # Title & Batch Info
+    story.append(Paragraph("Pathao Rides — Induction Performance Summary Report", title_style))
+    if batch_info:
+        info_text = f"<b>Batch Name:</b> {batch_info['batch_name']}<br/><b>Training Period:</b> {batch_info['start_date']} to {batch_info['end_date']}<br/><b>Status:</b> {batch_info['status']}"
+    else:
+        info_text = "<b>Batch Name:</b> N/A (No active batch calendar selected)"
+    story.append(Paragraph(info_text, sub_style))
+    story.append(Spacer(1, 10))
+
+    # Covered Topics Section
+    story.append(Paragraph("<b>Covered Topics in Training:</b>", heading_style))
+    topics_str = ", ".join(covered_topics) if covered_topics else "No topics marked as completed yet."
+    story.append(Paragraph(topics_str, sub_style))
+    story.append(Spacer(1, 15))
+
+    # Agent Performance Table
+    story.append(Paragraph("<b>Agent Evaluation Scorecard:</b>", heading_style))
+    
+    if not df_evals.empty:
+        # Table Header
+        table_data = [["EMP ID", "Agent Name", "Quiz 1", "Quiz 2", "Quiz 3", "Assign.", "Mock", "Live", "Final Score"]]
+        for _, row in df_evals.iterrows():
+            table_data.append([
+                str(row.get('empid', '')),
+                str(row.get('agent_name', '')),
+                str(row.get('quiz1', 0)),
+                str(row.get('quiz2', 0)),
+                str(row.get('quiz3', 0)),
+                str(row.get('assignment', 0)),
+                str(row.get('mock_call', 0)),
+                str(row.get('live_comm', 0)),
+                f"{row.get('final_score', 0):.2f}%"
+            ])
+        
+        t = Table(table_data, colWidths=[55, 110, 45, 45, 45, 45, 45, 45, 65])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1F2E28')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 9),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+            ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,1), (-1,-1), 8),
+        ]))
+        story.append(t)
+    else:
+        story.append(Paragraph("No evaluation data recorded.", sub_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 # Auth State
 if "is_admin" not in st.session_state:
@@ -102,14 +180,88 @@ is_admin_view = (role == "Admin View" and st.session_state.is_admin)
 st.title("Pathao Rides — CX Training Portal")
 
 if is_admin_view:
-    admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
-        "👥 Agent Information", 
+    admin_tab0, admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
+        "📈 Performance Dashboard",
+        "👥 Agent Directory", 
         "📊 Topics & Quiz Editor", 
         "📅 Induction Calendar Planner", 
         "📝 Agent Evaluation", 
         "🔁 Refresher Requests"
     ])
     
+    # 0. PERFORMANCE DASHBOARD TAB
+    with admin_tab0:
+        st.header("📈 Induction Training Performance Dashboard")
+        st.caption("Live, real-time performance summary of active batches, agent scores, and topics covered.")
+        
+        batches = db.get_batch_schedules()
+        evals = db.get_evaluations()
+        df_evals = pd.DataFrame(evals) if evals else pd.DataFrame()
+
+        # Active or Selected Batch Info
+        active_batch = batches[0] if batches else None
+
+        c_met1, c_met2, c_met3, c_met4 = st.columns(4)
+        with c_met1:
+            st.markdown(f"<div class='metric-box'><h4>Active Batch</h4><h3>{active_batch['batch_name'] if active_batch else 'N/A'}</h3></div>", unsafe_allow_html=True)
+        with c_met2:
+            st.markdown(f"<div class='metric-box'><h4>Batch Status</h4><h3>{active_batch['status'] if active_batch else 'N/A'}</h3></div>", unsafe_allow_html=True)
+        with c_met3:
+            st.markdown(f"<div class='metric-box'><h4>Total Agents</h4><h3>{len(df_evals) if not df_evals.empty else 0}</h3></div>", unsafe_allow_html=True)
+        with c_met4:
+            avg_score = df_evals['final_score'].mean() if not df_evals.empty and 'final_score' in df_evals else 0
+            st.markdown(f"<div class='metric-box'><h4>Batch Avg Score</h4><h3>{avg_score:.1f}%</h3></div>", unsafe_allow_html=True)
+
+        st.divider()
+
+        # Covered Topics calculation
+        covered_topics = []
+        if active_batch:
+            st.markdown(f"### 🗓️ Training Period: **{active_batch['start_date']}** to **{active_batch['end_date']}**")
+            sched_items = json.loads(active_batch['schedule_json'])
+            for item in sched_items:
+                if item.get("Status") == "Completed" and item.get("Activity / Topic") not in ["DAY OFF", "Topic Session"]:
+                    if item.get("Activity / Topic") not in covered_topics:
+                        covered_topics.append(item.get("Activity / Topic"))
+        
+        col_t1, col_t2 = st.columns([1, 2])
+        with col_t1:
+            st.markdown("### 📚 Topics Covered So Far")
+            if covered_topics:
+                for top in covered_topics:
+                    st.success(f"✓ {top}")
+            else:
+                st.info("No slots marked as 'Completed' yet.")
+
+        with col_t2:
+            st.markdown("### 👤 Agent Scoreboard")
+            if not df_evals.empty:
+                st.dataframe(df_evals[['empid', 'agent_name', 'quiz1', 'quiz2', 'quiz3', 'assignment', 'mock_call', 'live_comm', 'final_score']], use_container_width=True)
+            else:
+                st.info("No Agent evaluation records found.")
+
+        st.divider()
+
+        # Export Report Section
+        if active_batch and active_batch['status'] == 'Training Complete':
+            st.success("🎉 This batch's training has been marked as COMPLETE! Download full report below.")
+            pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
+            st.download_button(
+                label="📄 Download Full Induction Summary (PDF Report)",
+                data=pdf_bytes,
+                file_name=f"{active_batch['batch_name']}_Final_Summary.pdf",
+                mime="application/pdf"
+            )
+        else:
+            st.info("💡 Once training is marked as 'Training Complete' from the Calendar Planner, full report export options will unlock.")
+            pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
+            st.download_button(
+                label="📥 Download Current Live Report (PDF)",
+                data=pdf_bytes,
+                file_name="Induction_Live_Summary.pdf",
+                mime="application/pdf"
+            )
+
     # 1. AGENT INFORMATION DIRECTORY
     with admin_tab1:
         st.header("👥 Induction Agent Information Directory")
@@ -172,7 +324,7 @@ if is_admin_view:
                         st.success(f"Topic '{top['name']}' updated!")
                         st.rerun()
 
-    # 3. INDUCTION CALENDAR PLANNER (MULTI-SLOT SUPPORTED)
+    # 3. INDUCTION CALENDAR PLANNER & DAILY SLOT TRACKER
     with admin_tab3:
         st.header("📅 Induction Training Period Calendar Planner")
         st.caption("Select Date Range, add multiple time slots/topics per day, or mark Day Off.")
@@ -208,8 +360,6 @@ if is_admin_view:
                 }
 
         planner_data = st.session_state.get("current_planner", None)
-        
-        # Safe Fallback to avoid KeyError from old session states
         if planner_data and "day_slots" not in planner_data:
             planner_data["day_slots"] = {}
             for d in planner_data.get("dates", []):
@@ -229,14 +379,11 @@ if is_admin_view:
 
             full_schedule_output = []
 
-            # Loop through days
             for idx, d_str in enumerate(planner_data.get("dates", [])):
                 dt_obj = date.fromisoformat(d_str)
                 day_name = dt_obj.strftime("%A")
                 
                 st.markdown(f"### 🗓️ Day {idx+1}: `{d_str}` ({day_name})")
-                
-                # Check Day Off toggle
                 is_day_off = st.checkbox(f"🔴 Mark Entire Day as DAY OFF", key=f"off_day_{d_str}")
                 
                 if is_day_off:
@@ -251,7 +398,6 @@ if is_admin_view:
                     })
                 else:
                     slots = planner_data.get("day_slots", {}).get(d_str, [])
-                    
                     for s_idx, slot in enumerate(slots):
                         st.markdown(f"**Slot #{s_idx+1}**")
                         c1, c2, c3, c4 = st.columns([1.5, 2, 2, 0.5])
@@ -277,10 +423,9 @@ if is_admin_view:
                             "Activity / Topic": act_title,
                             "Time Slot": st_time,
                             "Trainer": st_trainer,
-                            "Status": "Scheduled"
+                            "Status": "In Progress"
                         })
 
-                    # Button to Add Extra Slot in the same day
                     if st.button(f"➕ Add Another Slot for {d_str}", key=f"add_slot_{d_str}"):
                         if d_str not in planner_data["day_slots"]:
                             planner_data["day_slots"][d_str] = []
@@ -291,54 +436,81 @@ if is_admin_view:
 
                 st.divider()
 
-            # Publish Calendar Button
-            if st.button("🚀 Publish Training Calendar to Google Sheet", type="primary"):
+            if st.button("🚀 Save & Publish Training Calendar", type="primary"):
                 sched_id = str(uuid.uuid4())
                 json_str = json.dumps(full_schedule_output)
-                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json_str, "Published")
-                
-                st.success("✅ Multi-slot Training Calendar saved successfully!")
-                
-                if webhook_url:
-                    try:
-                        resp = requests.post(webhook_url, json={
-                            "batch": planner_data['batch'],
-                            "schedule": full_schedule_output
-                        }, timeout=10)
-                        if resp.status_code in [200, 201]:
-                            st.success("📊 Exported to Google Sheet successfully!")
-                    except Exception as e:
-                        st.error(f"Error posting to Webhook: {e}")
+                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json_str, "In Progress")
+                st.success("✅ Training Calendar saved & published!")
+                st.rerun()
 
-                df_export = pd.DataFrame(full_schedule_output)
-                st.dataframe(df_export, use_container_width=True)
-                csv = df_export.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download CSV for Google Sheets",
-                    data=csv,
-                    file_name=f"{planner_data['batch']}_calendar.csv",
-                    mime="text/csv"
-                )
-
-        st.subheader("📁 Saved / Published Calendars")
+        st.subheader("📁 Saved Calendars & Daily Slot Status Tracker")
         batches = db.get_batch_schedules()
         if not batches:
             st.info("No Published Calendars found.")
         else:
             for b in batches:
-                with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']})"):
+                with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']}) — `Status: {b['status']}`", expanded=True):
                     data_list = json.loads(b['schedule_json'])
-                    st.dataframe(pd.DataFrame(data_list), use_container_width=True)
-                    if st.button("🗑️ Delete Schedule", key=f"del_b_{b['id']}"):
+                    
+                    st.write("**Daily Slot Status Management:**")
+                    has_changed = False
+                    
+                    # Update each slot status
+                    for i, item in enumerate(data_list):
+                        if item.get("Activity / Topic") != "DAY OFF":
+                            col1, col2, col3 = st.columns([2, 2, 1.5])
+                            col1.write(f"🗓️ `{item['Date']}` ({item['Day']})")
+                            col2.write(f"📌 **{item['Activity / Topic']}** ({item['Time Slot']})")
+                            
+                            curr_status = item.get("Status", "In Progress")
+                            new_status = col3.selectbox("Status", ["In Progress", "Completed"], 
+                                                        index=1 if curr_status == "Completed" else 0, 
+                                                        key=f"status_upd_{b['id']}_{i}")
+                            if new_status != curr_status:
+                                data_list[i]["Status"] = new_status
+                                has_changed = True
+
+                    if has_changed:
+                        db.update_schedule_json_and_status(b['id'], json.dumps(data_list))
+                        st.success("Slot status updated!")
+                        st.rerun()
+
+                    df_sched = pd.DataFrame(data_list)
+                    st.dataframe(df_sched, use_container_width=True)
+
+                    c_d1, c_d2, c_d3 = st.columns(3)
+                    
+                    # Download Calendar CSV
+                    csv_cal = df_sched.to_csv(index=False).encode('utf-8')
+                    c_d1.download_button(
+                        label="📥 Download Full Training Calendar (CSV)",
+                        data=csv_cal,
+                        file_name=f"{b['batch_name']}_Calendar.csv",
+                        mime="text/csv",
+                        key=f"dl_cal_{b['id']}"
+                    )
+                    
+                    # Training Complete Button
+                    if b['status'] != "Training Complete":
+                        if c_d2.button("🎓 Mark Training Complete", key=f"complete_batch_{b['id']}"):
+                            db.update_schedule_json_and_status(b['id'], json.dumps(data_list), status="Training Complete")
+                            st.success(f"Batch '{b['batch_name']}' is now marked as Training Complete!")
+                            st.rerun()
+                    else:
+                        c_d2.success("🎉 Batch Completed!")
+
+                    if c_d3.button("🗑️ Delete Schedule", key=f"del_b_{b['id']}"):
                         db.delete_batch_schedule(b['id'])
                         st.rerun()
 
-    # 4. AGENT EVALUATION SYSTEM
+    # 4. AGENT EVALUATION SYSTEM (WITH AUTO CALCULATION)
     with admin_tab4:
         st.header("📝 Induction Agent Evaluation System")
+        st.caption("Final Score will auto-calculate live as you adjust marks.")
+        
         evals = db.get_evaluations()
         if not evals:
-            st.warning("No Agents found in directory. Please add agents in the 'Agent Information' tab first.")
+            st.warning("No Agents found in directory. Please add agents in the 'Agent Directory' tab first.")
         else:
             st.subheader("Agent Score Card Sheet")
             for ev in evals:
@@ -354,12 +526,15 @@ if is_admin_view:
                         mock = c5.number_input("Mock Call Score", min_value=0.0, max_value=100.0, value=float(ev['mock_call']), key=f"mock_{ev['empid']}")
                         live = c6.number_input("Live Communication", min_value=0.0, max_value=100.0, value=float(ev['live_comm']), key=f"live_{ev['empid']}")
                         
-                        suggested_avg = round((q1 + q2 + q3 + ass + mock + live) / 6, 2)
-                        final_sc = c7.number_input("Final Score", min_value=0.0, max_value=100.0, value=float(ev['final_score'] or suggested_avg), key=f"fin_{ev['empid']}")
+                        # Auto Calculation Logic
+                        auto_calculated_final = round((q1 + q2 + q3 + ass + mock + live) / 6.0, 2)
+                        
+                        c7.markdown(f"**Auto Calculated Final Score:**")
+                        c7.markdown(f"### `{auto_calculated_final}%`")
                         
                         if st.form_submit_button("💾 Save Score Evaluation"):
-                            db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, final_sc)
-                            st.success(f"Scores saved for {ev['agent_name']}!")
+                            db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_calculated_final)
+                            st.success(f"Auto-calculated Final Score ({auto_calculated_final}%) saved for {ev['agent_name']}!")
                             st.rerun()
 
     # 5. REFRESHER REQUESTS
