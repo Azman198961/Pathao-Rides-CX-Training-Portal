@@ -178,7 +178,7 @@ if is_admin_view:
         with col_t2:
             st.markdown("### 👤 Agent Scoreboard")
             if not df_evals.empty:
-                st.dataframe(df_evals[['empid', 'agent_name', 'quiz1', 'quiz2', 'quiz3', 'assignment', 'mock_call', 'live_comm', 'final_score']], use_container_width=True)
+                st.dataframe(df_evals[['empid', 'agent_name', 'quiz1', 'quiz2', 'quiz3', 'assignment', 'mock_call', 'live_comm', 'final_score']], width="stretch")
             else:
                 st.info("No Agent evaluation records found.")
 
@@ -202,7 +202,7 @@ if is_admin_view:
             st.info("No self-training activities logged yet.")
         else:
             df_logs = pd.DataFrame(logs)
-            st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time']], use_container_width=True)
+            st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time']], width="stretch")
             
             csv_logs = df_logs.to_csv(index=False).encode('utf-8')
             st.download_button(
@@ -234,7 +234,7 @@ if is_admin_view:
 
         agents = db.get_agents()
         if agents:
-            st.dataframe(pd.DataFrame(agents), use_container_width=True)
+            st.dataframe(pd.DataFrame(agents), width="stretch")
             for ag in agents:
                 if st.button(f"🗑️ Delete {ag['name']}", key=f"del_ag_{ag['empid']}"):
                     db.delete_agent(ag['empid'])
@@ -288,14 +288,14 @@ if is_admin_view:
                     with adm_content_tab1:
                         embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
                         if embed_slide:
-                            st.components.v1.iframe(embed_slide, height=580, scrolling=False)
+                            st.iframe(embed_slide, height=580, scrolling=False)
                         else:
                             st.warning("No Slide Presentation available for this topic.")
                             
                     with adm_content_tab2:
                         embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
                         if embed_form:
-                            st.components.v1.iframe(embed_form, height=700, scrolling=True)
+                            st.iframe(embed_form, height=700, scrolling=True)
                         else:
                             st.info("No Quiz Form link added for this topic.")
 
@@ -379,7 +379,7 @@ if is_admin_view:
                     st.rerun()
 
                 df_sched = pd.DataFrame(data_list)
-                st.dataframe(df_sched, use_container_width=True)
+                st.dataframe(df_sched, width="stretch")
 
                 c_d1, c_d2, c_d3 = st.columns(3)
                 c_d1.download_button("📥 Download Calendar CSV", df_sched.to_csv(index=False).encode('utf-8'), f"{b['batch_name']}_Calendar.csv", "text/csv", key=f"dl_cal_{b['id']}")
@@ -505,14 +505,14 @@ else:
             with content_tab1:
                 embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
                 if embed_slide:
-                    st.components.v1.iframe(embed_slide, height=560, scrolling=False)
+                    st.iframe(embed_slide, height=560, scrolling=False)
                 else:
                     st.warning("No Slide Presentation available.")
                     
             with content_tab2:
                 embed_form = format_form_url(selected_topic.get("form_url", ""))
                 if embed_form:
-                    st.components.v1.iframe(embed_form, height=700, scrolling=True)
+                    st.iframe(embed_form, height=700, scrolling=True)
                 else:
                     st.info("No Quiz Form link added for this topic yet.")
 
