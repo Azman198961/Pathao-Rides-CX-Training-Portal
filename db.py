@@ -5,10 +5,11 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 DB_FILE = "training_portal.db"
-SPREADSHEET_NAME = "Rides CX Training Portal"
+# আপনার প্রদানকৃত গুগল শিটের ID
+SPREADSHEET_ID = "1dDmSYFVG_cMEOAZgxaTG4Gd_hPl-S8Dc1XeDgpLCP6U"
 
 def sync_to_gsheet(sheet_name, row_data):
-    """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
+    """Appends a new row to the specified tab in Google Sheets using Sheet ID."""
     try:
         if "gcp_service_account" not in st.secrets:
             st.error("❌ GSheet Sync Failed: 'gcp_service_account' missing in Streamlit Secrets!")
@@ -22,15 +23,15 @@ def sync_to_gsheet(sheet_name, row_data):
         # Streamlit Secrets থেকে Dict আকারে নেওয়া
         creds_dict = dict(st.secrets["gcp_service_account"])
         
-        # Private Key-এর \n ফরম্যাটিং ইস্যু থাকলে তা ফিক্স করা
+        # Private Key-এর \n ফরম্যাটিং ইস্যু ফিক্স করা
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
         
-        # SpreadSheet ওপেন করা
-        sh = gc.open(SPREADSHEET_NAME)
+        # Sheet ID দিয়ে সরাসরি ওপেন করা
+        sh = gc.open_by_key(SPREADSHEET_ID)
         
         # Worksheet চেক করা, না থাকলে অটোমেটিক তৈরি করা
         try:
