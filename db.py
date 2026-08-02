@@ -7,15 +7,18 @@ from google.oauth2.service_account import Credentials
 DB_FILE = "training_portal.db"
 SPREADSHEET_NAME = "Rides CX Training Portal"
 
-# Google Sheet Sync Helper using Streamlit Secrets
 def sync_to_gsheet(sheet_name, row_data):
     """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
     try:
         if "gcp_service_account" not in st.secrets:
-            st.error("❌ GSheet Sync Error: 'gcp_service_account' missing in Streamlit Secrets!")
+            st.error("❌ GSheet Sync Failed: 'gcp_service_account' missing in Streamlit Secrets!")
             return
 
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        # Added drive scope for seamless spreadsheet lookup
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         
@@ -24,11 +27,9 @@ def sync_to_gsheet(sheet_name, row_data):
         worksheet = sh.worksheet(sheet_name)
         worksheet.append_row(row_data)
         
-        # UI-তে সফলতার নোটিফিকেশন দেখাবে
         st.toast(f"✅ Synced to Google Sheet: {sheet_name}")
     except Exception as e:
-        # সরাসরি স্ক্রিনে আসল এররটি দেখাবে
-        st.error(f"❌ GSheet Sync Failed ({sheet_name}): {e}")
+        st.error(f"❌ GSheet Sync Error ({sheet_name}): {e}")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -133,8 +134,8 @@ def init_db():
         cursor.execute("""
             INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name=?, slide_url=?
-        """, (t[0], t[1], t[2], t[3], t[4], t[5], t[1], t[4]))
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name, slide_url=excluded.slide_url
+        """, (t[0], t[1], t[2], t[3], t[4], t[5]))
         
     conn.commit()
     conn.close()
