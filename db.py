@@ -14,20 +14,34 @@ def sync_to_gsheet(sheet_name, row_data):
             st.error("❌ GSheet Sync Failed: 'gcp_service_account' missing in Streamlit Secrets!")
             return
 
-        # Added drive scope for seamless spreadsheet lookup
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
+        
+        # Streamlit Secrets থেকে Dict আকারে নেওয়া
         creds_dict = dict(st.secrets["gcp_service_account"])
+        
+        # Private Key-এর \n ফরম্যাটিং ইস্যু থাকলে তা ফিক্স করা
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        
         gc = gspread.authorize(creds)
-        sh = gc.open(SPREADSHEET_NAME)
-        worksheet = sh.worksheet(sheet_name)
-        worksheet.append_row(row_data)
         
+        # SpreadSheet ওপেন করা
+        sh = gc.open(SPREADSHEET_NAME)
+        
+        # Worksheet চেক করা, না থাকলে অটোমেটিক তৈরি করা
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="20")
+        
+        # ডাটা অ্যাপেন্ড করা
+        worksheet.append_row(row_data)
         st.toast(f"✅ Synced to Google Sheet: {sheet_name}")
+        
     except Exception as e:
         st.error(f"❌ GSheet Sync Error ({sheet_name}): {e}")
 
