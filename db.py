@@ -12,7 +12,7 @@ def sync_to_gsheet(sheet_name, row_data):
     """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
     try:
         if "gcp_service_account" not in st.secrets:
-            print("GSheet Sync Warning: 'gcp_service_account' not found in st.secrets.")
+            st.error("❌ GSheet Sync Error: 'gcp_service_account' missing in Streamlit Secrets!")
             return
 
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -23,9 +23,12 @@ def sync_to_gsheet(sheet_name, row_data):
         sh = gc.open(SPREADSHEET_NAME)
         worksheet = sh.worksheet(sheet_name)
         worksheet.append_row(row_data)
-        print(f"Successfully synced to GSheet tab: {sheet_name}")
+        
+        # UI-তে সফলতার নোটিফিকেশন দেখাবে
+        st.toast(f"✅ Synced to Google Sheet: {sheet_name}")
     except Exception as e:
-        print(f"GSheet Sync Error ({sheet_name}): {e}")
+        # সরাসরি স্ক্রিনে আসল এররটি দেখাবে
+        st.error(f"❌ GSheet Sync Failed ({sheet_name}): {e}")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
