@@ -288,14 +288,14 @@ if is_admin_view:
                     with adm_content_tab1:
                         embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
                         if embed_slide:
-                            st.iframe(embed_slide, height=580, scrolling=False)
+                            st.iframe(embed_slide, height=580)
                         else:
                             st.warning("No Slide Presentation available for this topic.")
                             
                     with adm_content_tab2:
                         embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
                         if embed_form:
-                            st.iframe(embed_form, height=700, scrolling=True)
+                            st.iframe(embed_form, height=700)
                         else:
                             st.info("No Quiz Form link added for this topic.")
 
@@ -505,14 +505,14 @@ else:
             with content_tab1:
                 embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
                 if embed_slide:
-                    st.iframe(embed_slide, height=560, scrolling=False)
+                    st.iframe(embed_slide, height=560)
                 else:
                     st.warning("No Slide Presentation available.")
                     
             with content_tab2:
                 embed_form = format_form_url(selected_topic.get("form_url", ""))
                 if embed_form:
-                    st.iframe(embed_form, height=700, scrolling=True)
+                    st.iframe(embed_form, height=700)
                 else:
                     st.info("No Quiz Form link added for this topic yet.")
 
