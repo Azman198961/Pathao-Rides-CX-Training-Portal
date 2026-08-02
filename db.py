@@ -1,6 +1,31 @@
 import sqlite3
+import pandas as pd
+import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 
 DB_FILE = "training_portal.db"
+SPREADSHEET_NAME = "Rides CX Training Portal"
+
+# Google Sheet Sync Helper using Streamlit Secrets
+def sync_to_gsheet(sheet_name, row_data):
+    """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
+    try:
+        if "gcp_service_account" not in st.secrets:
+            print("GSheet Sync Warning: 'gcp_service_account' not found in st.secrets.")
+            return
+
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        
+        gc = gspread.authorize(creds)
+        sh = gc.open(SPREADSHEET_NAME)
+        worksheet = sh.worksheet(sheet_name)
+        worksheet.append_row(row_data)
+        print(f"Successfully synced to GSheet tab: {sheet_name}")
+    except Exception as e:
+        print(f"GSheet Sync Error ({sheet_name}): {e}")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -101,7 +126,6 @@ def init_db():
         ("t8", "Pathao Internal Tools", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1UZQiOydwqm9etUb8MzEDXwGHbLipc30O/embed", "")
     ]
     
-    # Insert or Update so current topics list gets synced instantly
     for t in exact_topics:
         cursor.execute("""
             INSERT INTO topics (id, name, duration, trainer_name, slide_url, form_url)
@@ -165,10 +189,17 @@ def upsert_topic(topic_dict):
 
 def insert_self_training_log(log_id, empid, name, channel, topic_name):
     conn = get_connection()
-    conn.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name) VALUES (?, ?, ?, ?, ?)",
-                 (log_id, empid, name, channel, topic_name))
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name) VALUES (?, ?, ?, ?, ?)",
+                   (log_id, empid, name, channel, topic_name))
     conn.commit()
+    
+    row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
+    access_time = row['access_time'] if row else ""
     conn.close()
+
+    # Sync to Google Sheets: "Self Training Log"
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time)])
 
 def get_self_training_logs():
     conn = get_connection()
@@ -176,12 +207,25 @@ def get_self_training_logs():
     conn.close()
     return [dict(r) for r in rows]
 
-def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, status):
+def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, status, full_schedule_output=None):
     conn = get_connection()
     conn.execute("INSERT INTO batch_schedules (id, batch_name, start_date, end_date, schedule_json, status) VALUES (?, ?, ?, ?, ?, ?)",
                  (sched_id, batch_name, start_date, end_date, json_str, status))
     conn.commit()
     conn.close()
+
+    # Sync each slot item to Google Sheets: "Induction Calender"
+    if full_schedule_output and isinstance(full_schedule_output, list):
+        for item in full_schedule_output:
+            sync_to_gsheet("Induction Calender", [
+                batch_name,
+                item.get("Date", ""),
+                item.get("Day", ""),
+                item.get("Activity / Topic", ""),
+                item.get("Time Slot", ""),
+                item.get("Trainer", ""),
+                item.get("Status", "")
+            ])
 
 def get_batch_schedules():
     conn = get_connection()
@@ -212,6 +256,9 @@ def get_evaluations():
 
 def update_evaluation(empid, q1, q2, q3, ass, mock, live, final_score):
     conn = get_connection()
+    row = conn.execute("SELECT agent_name FROM evaluations WHERE empid=?", (empid,)).fetchone()
+    agent_name = row['agent_name'] if row else ""
+    
     conn.execute("""
         UPDATE evaluations 
         SET quiz1=?, quiz2=?, quiz3=?, assignment=?, mock_call=?, live_comm=?, final_score=?
@@ -219,6 +266,9 @@ def update_evaluation(empid, q1, q2, q3, ass, mock, live, final_score):
     """, (q1, q2, q3, ass, mock, live, final_score, empid))
     conn.commit()
     conn.close()
+
+    # Sync to Google Sheets: "Agent Evaluation"
+    sync_to_gsheet("Agent Evaluation", [empid, agent_name, q1, q2, q3, ass, mock, live, final_score])
 
 def insert_refresher_request(req_dict):
     conn = get_connection()
@@ -228,6 +278,17 @@ def insert_refresher_request(req_dict):
     """, (req_dict['id'], req_dict['empid'], req_dict['name'], req_dict['channel'], req_dict['topic_name'], req_dict['preferred_slot']))
     conn.commit()
     conn.close()
+
+    # Sync to Google Sheets: "Refresher Requests"
+    sync_to_gsheet("Refresher Requests", [
+        req_dict['id'],
+        req_dict['empid'],
+        req_dict['name'],
+        req_dict['channel'],
+        req_dict['topic_name'],
+        req_dict['preferred_slot'],
+        "Pending"
+    ])
 
 def get_refresher_requests():
     conn = get_connection()
