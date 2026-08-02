@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .DS_Store
 service_account.json
+.streamlit/secrets.toml
+service_account.json
+training_portal.db
