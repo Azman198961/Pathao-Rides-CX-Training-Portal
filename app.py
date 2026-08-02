@@ -571,3 +571,11 @@ else:
                         st.success("Training Request submitted successfully!")
                     except Exception as e:
                         st.error(f"Error submitting request: {e}")
+                        st.sidebar.divider()
+if st.sidebar.button("🧪 Test Google Sheet Connection"):
+    import db
+    try:
+        db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02"])
+        st.sidebar.success("Test Data Sent Successfully!")
+    except Exception as e:
+        st.sidebar.error(f"Test Failed: {e}")
