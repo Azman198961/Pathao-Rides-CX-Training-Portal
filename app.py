@@ -104,7 +104,6 @@ with st.sidebar:
     if role == "Admin View" and not st.session_state.is_admin:
         pw = st.text_input("Enter Admin Password", type="password")
         if st.button("Authorize"):
-            # Reading password securely from st.secrets
             admin_pwd = st.secrets.get("admin_password", "changeme123")
             if pw == admin_pwd:
                 st.session_state.is_admin = True
@@ -248,8 +247,8 @@ if is_admin_view:
             with st.expander(f"⚙️ Edit Module: **{top['name']}**", expanded=False):
                 with st.form(f"edit_top_form_{top['id']}"):
                     c1, c2 = st.columns(2)
-                    new_time = c1.text_input("Duration *", value=top.get('duration', ''), key=f"time_{top['id']}")
-                    new_trainer = c2.text_input("Trainer Name *", value=top.get('trainer_name', 'Md Asikul islam Azman'), key=f"tr_{top['id']}")
+                    new_time = c1.text_input("Duration *", value=top.get('duration', ''), key=f"edit_dur_{top['id']}")
+                    new_trainer = c2.text_input("Trainer Name *", value=top.get('trainer_name', 'Md Asikul islam Azman'), key=f"edit_tr_{top['id']}")
                     new_slide = st.text_input("Google Slide Link", value=top.get('slide_url', ''), key=f"slide_{top['id']}")
                     new_form = st.text_input("Quiz Form Link", value=top.get('form_url', ''), key=f"form_{top['id']}")
                     
@@ -288,14 +287,14 @@ if is_admin_view:
                     with adm_content_tab1:
                         embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
                         if embed_slide:
-                            st.iframe(embed_slide, height=580)
+                            st.components.v1.iframe(embed_slide, height=580)
                         else:
                             st.warning("No Slide Presentation available for this topic.")
                             
                     with adm_content_tab2:
                         embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
                         if embed_form:
-                            st.iframe(embed_form, height=700)
+                            st.components.v1.iframe(embed_form, height=700)
                         else:
                             st.info("No Quiz Form link added for this topic.")
 
@@ -505,14 +504,14 @@ else:
             with content_tab1:
                 embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
                 if embed_slide:
-                    st.iframe(embed_slide, height=560)
+                    st.components.v1.iframe(embed_slide, height=560)
                 else:
                     st.warning("No Slide Presentation available.")
                     
             with content_tab2:
                 embed_form = format_form_url(selected_topic.get("form_url", ""))
                 if embed_form:
-                    st.iframe(embed_form, height=700)
+                    st.components.v1.iframe(embed_form, height=700)
                 else:
                     st.info("No Quiz Form link added for this topic yet.")
 
