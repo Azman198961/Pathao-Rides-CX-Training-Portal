@@ -20,12 +20,20 @@ def sync_to_gsheet(sheet_name, row_data):
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # Streamlit Secrets থেকে Dict আকারে নেওয়া
+        # Secrets থেকে Dict কপি করা
         creds_dict = dict(st.secrets["gcp_service_account"])
         
-        # Private Key-এর \n ফরম্যাটিং ইস্যু ফিক্স করা
+        # --- INVALID PRIVATE KEY FIX ---
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            pk = creds_dict["private_key"]
+            # Escaped \n কে আসল নিউলাইনে কনভার্ট করা
+            pk = pk.replace("\\n", "\n")
+            # চারপাশের বাড়তি স্পেস বা কোটেশন ক্লিন করা
+            pk = pk.strip()
+            if pk.startswith('"') and pk.endswith('"'):
+                pk = pk[1:-1]
+            creds_dict["private_key"] = pk
+        # -------------------------------
 
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
