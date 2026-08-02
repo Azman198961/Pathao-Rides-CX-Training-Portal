@@ -4,3 +4,4 @@ openpyxl>=3.1
 python-docx
 requests
 reportlab
+pip install gspread google-auth
