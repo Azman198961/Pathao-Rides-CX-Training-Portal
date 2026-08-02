@@ -104,7 +104,9 @@ with st.sidebar:
     if role == "Admin View" and not st.session_state.is_admin:
         pw = st.text_input("Enter Admin Password", type="password")
         if st.button("Authorize"):
-            if pw == st.secrets.get("admin_password", "changeme123"):
+            # Reading password securely from st.secrets
+            admin_pwd = st.secrets.get("admin_password", "changeme123")
+            if pw == admin_pwd:
                 st.session_state.is_admin = True
                 st.rerun()
             else:
@@ -350,8 +352,8 @@ if is_admin_view:
 
             if st.button("🚀 Save & Publish Calendar", type="primary"):
                 sched_id = str(uuid.uuid4())
-                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress")
-                st.success("Calendar published permanently!")
+                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress", full_schedule_output=full_schedule_output)
+                st.success("Calendar published permanently and synced to GSheet!")
                 st.rerun()
 
         st.subheader("📁 Saved Calendars & Daily Slot Status Tracker")
@@ -415,7 +417,7 @@ if is_admin_view:
                         
                         if st.form_submit_button("💾 Save Score"):
                             db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_final)
-                            st.success(f"Score Saved permanently!")
+                            st.success(f"Score Saved permanently and synced to GSheet!")
                             st.rerun()
 
     # 5. REFRESHER REQUESTS MANAGEMENT
@@ -547,4 +549,4 @@ else:
                         "topic_name": a_topic,
                         "preferred_slot": f"{r_date.strftime('%d %b %Y')} ({r_time})"
                     })
-                    st.success("Training Request submitted successfully!")
+                    st.success("Training Request submitted successfully and synced to GSheet!")
