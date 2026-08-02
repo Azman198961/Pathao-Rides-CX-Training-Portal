@@ -14,7 +14,12 @@ from reportlab.lib import colors
 import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
-db.init_db()
+
+# Safe DB Initialization
+try:
+    db.init_db()
+except Exception as e:
+    st.error(f"Database Initialization Error: {e}")
 
 # Helper functions
 def format_embed_url(url):
@@ -227,9 +232,12 @@ if is_admin_view:
                     if not ag_id or not ag_name or not ag_email:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
-                        db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
-                        st.success("Agent Info saved permanently!")
-                        st.rerun()
+                        try:
+                            db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
+                            st.success("Agent Info saved successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to save agent: {e}")
 
         agents = db.get_agents()
         if agents:
@@ -253,14 +261,17 @@ if is_admin_view:
                     new_form = st.text_input("Quiz Form Link", value=top.get('form_url', ''), key=f"form_{top['id']}")
                     
                     if st.form_submit_button("💾 Update Details"):
-                        db.upsert_topic({
-                            "id": top['id'], "name": top['name'],
-                            "duration": new_time.strip(), "trainer_name": new_trainer.strip(),
-                            "slide_url": format_embed_url(new_slide.strip()),
-                            "form_url": format_form_url(new_form.strip())
-                        })
-                        st.success(f"Topic '{top['name']}' updated permanently!")
-                        st.rerun()
+                        try:
+                            db.upsert_topic({
+                                "id": top['id'], "name": top['name'],
+                                "duration": new_time.strip(), "trainer_name": new_trainer.strip(),
+                                "slide_url": format_embed_url(new_slide.strip()),
+                                "form_url": format_form_url(new_form.strip())
+                            })
+                            st.success(f"Topic '{top['name']}' updated!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error updating topic: {e}")
 
     # TRAINING VIEWER
     with admin_tab_view:
@@ -287,14 +298,14 @@ if is_admin_view:
                     with adm_content_tab1:
                         embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
                         if embed_slide:
-                            st.components.v1.iframe(embed_slide, height=580)
+                            st.iframe(embed_slide, height=580)
                         else:
                             st.warning("No Slide Presentation available for this topic.")
                             
                     with adm_content_tab2:
                         embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
                         if embed_form:
-                            st.components.v1.iframe(embed_form, height=700)
+                            st.iframe(embed_form, height=700)
                         else:
                             st.info("No Quiz Form link added for this topic.")
 
@@ -350,10 +361,13 @@ if is_admin_view:
                         st.rerun()
 
             if st.button("🚀 Save & Publish Calendar", type="primary"):
-                sched_id = str(uuid.uuid4())
-                db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress", full_schedule_output=full_schedule_output)
-                st.success("Calendar published permanently and synced to GSheet!")
-                st.rerun()
+                try:
+                    sched_id = str(uuid.uuid4())
+                    db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress", full_schedule_output=full_schedule_output)
+                    st.success("Calendar published permanently!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error publishing calendar: {e}")
 
         st.subheader("📁 Saved Calendars & Daily Slot Status Tracker")
         batches = db.get_batch_schedules()
@@ -415,9 +429,12 @@ if is_admin_view:
                         c7.markdown(f"**Auto Final Score:**\n### `{auto_final}%`")
                         
                         if st.form_submit_button("💾 Save Score"):
-                            db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_final)
-                            st.success(f"Score Saved permanently and synced to GSheet!")
-                            st.rerun()
+                            try:
+                                db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_final)
+                                st.success("Score Saved permanently!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving evaluation: {e}")
 
     # 5. REFRESHER REQUESTS MANAGEMENT
     with admin_tab5:
@@ -484,11 +501,13 @@ else:
                     else:
                         selected_obj = next((t for t in all_topics if t["name"] == s_topic), None)
                         if selected_obj:
-                            log_id = str(uuid.uuid4())
-                            db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic)
-                            
-                            st.session_state.active_self_topic = selected_obj
-                            st.rerun()
+                            try:
+                                log_id = str(uuid.uuid4())
+                                db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic)
+                                st.session_state.active_self_topic = selected_obj
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Log Error: {e}")
         else:
             selected_topic = st.session_state.active_self_topic
             
@@ -504,14 +523,14 @@ else:
             with content_tab1:
                 embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
                 if embed_slide:
-                    st.components.v1.iframe(embed_slide, height=560)
+                    st.iframe(embed_slide, height=560)
                 else:
                     st.warning("No Slide Presentation available.")
                     
             with content_tab2:
                 embed_form = format_form_url(selected_topic.get("form_url", ""))
                 if embed_form:
-                    st.components.v1.iframe(embed_form, height=700)
+                    st.iframe(embed_form, height=700)
                 else:
                     st.info("No Quiz Form link added for this topic yet.")
 
@@ -540,12 +559,15 @@ else:
                 if not a_name or not a_id or a_chan == "-- Select Channel --" or a_topic == "-- Select Topic --" or r_time == "-- Select Slot --":
                     st.error("All fields marked with (*) are required!")
                 else:
-                    db.insert_refresher_request({
-                        "id": str(uuid.uuid4()), 
-                        "empid": a_id.strip(), 
-                        "name": a_name.strip(),
-                        "channel": a_chan, 
-                        "topic_name": a_topic,
-                        "preferred_slot": f"{r_date.strftime('%d %b %Y')} ({r_time})"
-                    })
-                    st.success("Training Request submitted successfully and synced to GSheet!")
+                    try:
+                        db.insert_refresher_request({
+                            "id": str(uuid.uuid4()), 
+                            "empid": a_id.strip(), 
+                            "name": a_name.strip(),
+                            "channel": a_chan, 
+                            "topic_name": a_topic,
+                            "preferred_slot": f"{r_date.strftime('%d %b %Y')} ({r_time})"
+                        })
+                        st.success("Training Request submitted successfully!")
+                    except Exception as e:
+                        st.error(f"Error submitting request: {e}")
