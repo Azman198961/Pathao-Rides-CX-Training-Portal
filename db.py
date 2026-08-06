@@ -27,7 +27,7 @@ def sync_to_gsheet(sheet_name, row_data):
         st.error(f"❌ GSheet Sync Failed ({sheet_name}): {e}")
 
 def get_connection():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn = sqlite3.connect(DB_FILE, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -35,7 +35,7 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Employees Table (Updated with Channel and Employee Status)
+    # Employees Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             empid TEXT PRIMARY KEY,
