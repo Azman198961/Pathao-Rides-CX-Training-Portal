@@ -35,22 +35,25 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Agents Table (Added employment_status)
+    # Employees Table (Updated with Channel and Employee Status)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             empid TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
             phone TEXT,
+            channel TEXT DEFAULT 'Inbound Voice',
             employment_status TEXT DEFAULT 'Induction'
         )
     """)
     
-    # Check if employment_status column exists in agents for older databases
+    # Schema Migration Check for older databases
     cursor.execute("PRAGMA table_info(agents)")
     columns = [col[1] for col in cursor.fetchall()]
     if 'employment_status' not in columns:
         cursor.execute("ALTER TABLE agents ADD COLUMN employment_status TEXT DEFAULT 'Induction'")
+    if 'channel' not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN channel TEXT DEFAULT 'Inbound Voice'")
     
     # Topics Table
     cursor.execute("""
@@ -64,7 +67,7 @@ def init_db():
         )
     """)
     
-    # Self Training Logs (Added quiz_score)
+    # Self Training Logs
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -82,7 +85,7 @@ def init_db():
     if 'quiz_score' not in log_cols:
         cursor.execute("ALTER TABLE self_training_logs ADD COLUMN quiz_score REAL DEFAULT 0.0")
 
-    # Batch Schedules (Added edit_history_json)
+    # Batch Schedules
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS batch_schedules (
             id TEXT PRIMARY KEY,
@@ -179,13 +182,13 @@ def get_agents(status_filter=None):
     conn.close()
     return [dict(r) for r in rows]
 
-def upsert_agent(empid, name, email, phone, employment_status='Induction'):
+def upsert_agent(empid, name, email, phone="", channel="Inbound Voice", employment_status="Induction"):
     conn = get_connection()
     conn.execute("""
-        INSERT INTO agents (empid, name, email, phone, employment_status) 
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?, employment_status=?
-    """, (empid, name, email, phone, employment_status, name, email, phone, employment_status))
+        INSERT INTO agents (empid, name, email, phone, channel, employment_status) 
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?, channel=?, employment_status=?
+    """, (empid, name, email, phone, channel, employment_status, name, email, phone, channel, employment_status))
     
     if employment_status == 'Induction':
         conn.execute("""
