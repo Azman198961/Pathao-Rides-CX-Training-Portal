@@ -3,7 +3,14 @@ import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Bangladesh Standard Timezone Setup (UTC +6 Hours)
+BST = timezone(timedelta(hours=6))
+
+def get_current_bst_time():
+    """Returns current date and time formatted in Bangladesh Standard Time (BST)."""
+    return datetime.now(BST).strftime("%Y-%m-%d %H:%M:%S")
 
 DB_FILE = "training_portal.db"
 SPREADSHEET_NAME = "Rides CX Training Portal"
@@ -77,7 +84,7 @@ def init_db():
             channel TEXT,
             topic_name TEXT,
             quiz_score REAL DEFAULT 0.0,
-            access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            access_time TIMESTAMP,
             status TEXT DEFAULT 'In Progress',
             start_time TIMESTAMP,
             completion_time TIMESTAMP,
@@ -187,9 +194,9 @@ def init_db():
     conn.close()
 
 def auto_update_delayed_trainings():
-    """Checks for 'In Progress' training sessions older than 24 hours and updates status to 'Delayed'."""
+    """Checks for 'In Progress' training sessions older than 24 hours (BST) and updates status to 'Delayed'."""
     conn = get_connection()
-    cutoff_time = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    cutoff_time = (datetime.now(BST) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute("""
         UPDATE self_training_logs 
         SET status = 'Delayed' 
@@ -254,18 +261,15 @@ def upsert_topic(topic_dict):
 def insert_self_training_log(log_id, empid, name, channel, topic_name, quiz_score=0.0):
     conn = get_connection()
     cursor = conn.cursor()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = get_current_bst_time()
     cursor.execute("""
-        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, quiz_score, status, start_time) 
-        VALUES (?, ?, ?, ?, ?, ?, 'In Progress', ?)
-    """, (log_id, empid, name, channel, topic_name, quiz_score, now_str))
+        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, quiz_score, status, start_time, access_time) 
+        VALUES (?, ?, ?, ?, ?, ?, 'In Progress', ?, ?)
+    """, (log_id, empid, name, channel, topic_name, quiz_score, now_str, now_str))
     conn.commit()
-    
-    row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
-    access_time = row['access_time'] if row else now_str
     conn.close()
 
-    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, quiz_score, str(access_time), "In Progress", "", ""])
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, quiz_score, now_str, "In Progress", "", ""])
 
 def get_active_self_training(empid):
     """Fetches any active or delayed training for the given EMP ID."""
@@ -281,7 +285,7 @@ def get_active_self_training(empid):
 
 def complete_self_training_log(log_id, quiz_score=0.0, delay_reason=""):
     conn = get_connection()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = get_current_bst_time()
     conn.execute("""
         UPDATE self_training_logs 
         SET status = 'Completed', completion_time = ?, quiz_score = ?, delay_reason = ?
