@@ -1,4 +1,5 @@
 import sqlite3
+import uuid
 import pandas as pd
 import streamlit as st
 import gspread
@@ -26,9 +27,7 @@ def sync_to_gsheet(sheet_name, row_data):
         # --- INVALID PRIVATE KEY FIX ---
         if "private_key" in creds_dict:
             pk = creds_dict["private_key"]
-            # Escaped \n কে আসল নিউলাইনে কনভার্ট করা
             pk = pk.replace("\\n", "\n")
-            # চারপাশের বাড়তি স্পেস বা কোটেশন ক্লিন করা
             pk = pk.strip()
             if pk.startswith('"') and pk.endswith('"'):
                 pk = pk[1:-1]
@@ -315,6 +314,28 @@ def insert_refresher_request(req_dict):
         req_dict['topic_name'],
         req_dict['preferred_slot'],
         "Pending"
+    ])
+
+def assign_refresher_by_admin(empid, name, channel, topic_name, preferred_slot):
+    """Allows Admin to directly assign a Refresher Training to an existing agent."""
+    req_id = str(uuid.uuid4())
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO refresher_requests (id, empid, name, channel, topic_name, preferred_slot, status, training_status)
+        VALUES (?, ?, ?, ?, ?, ?, 'Assigned by Admin', 'Pending')
+    """, (req_id, empid, name, channel, topic_name, preferred_slot))
+    conn.commit()
+    conn.close()
+
+    # Google Sheets Sync
+    sync_to_gsheet("Refresher Requests", [
+        req_id,
+        empid,
+        name,
+        channel,
+        topic_name,
+        preferred_slot,
+        "Assigned by Admin"
     ])
 
 def get_refresher_requests():
