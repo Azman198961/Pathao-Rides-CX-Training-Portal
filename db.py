@@ -6,7 +6,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 DB_FILE = "training_portal.db"
-# আপনার প্রদানকৃত গুগল শিটের ID
 SPREADSHEET_ID = "1dDmSYFVG_cMEOAZgxaTG4Gd_hPl-S8Dc1XeDgpLCP6U"
 
 def sync_to_gsheet(sheet_name, row_data):
@@ -21,32 +20,25 @@ def sync_to_gsheet(sheet_name, row_data):
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # Secrets থেকে Dict কপি করা
         creds_dict = dict(st.secrets["gcp_service_account"])
         
-        # --- INVALID PRIVATE KEY FIX ---
         if "private_key" in creds_dict:
             pk = creds_dict["private_key"]
-            pk = pk.replace("\\n", "\n")
-            pk = pk.strip()
+            pk = pk.replace("\\n", "\n").strip()
             if pk.startswith('"') and pk.endswith('"'):
                 pk = pk[1:-1]
             creds_dict["private_key"] = pk
-        # -------------------------------
 
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
         
-        # Sheet ID দিয়ে সরাসরি ওপেন করা
         sh = gc.open_by_key(SPREADSHEET_ID)
         
-        # Worksheet চেক করা, না থাকলে অটোমেটিক তৈরি করা
         try:
             worksheet = sh.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
             worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="20")
         
-        # ডাটা অ্যাপেন্ড করা
         worksheet.append_row(row_data)
         st.toast(f"✅ Synced to Google Sheet: {sheet_name}")
         
@@ -62,13 +54,15 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Agents Table
+    # Agents Table (with Channel & Employment Status)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             empid TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
-            phone TEXT
+            phone TEXT,
+            channel TEXT DEFAULT '',
+            employment_status TEXT DEFAULT 'Induction'
         )
     """)
     
@@ -140,7 +134,7 @@ def init_db():
     
     conn.commit()
     
-    # --- Exact 8 Topics Seeding ---
+    # Seeding Default Topics
     exact_topics = [
         ("t1", "Fare", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed", ""),
         ("t2", "Joining Process", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed", ""),
@@ -162,7 +156,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Helper DB Functions ---
+# --- Agent Management Functions ---
 
 def get_agents():
     conn = get_connection()
@@ -170,20 +164,63 @@ def get_agents():
     conn.close()
     return [dict(r) for r in rows]
 
-def upsert_agent(empid, name, email, phone):
+def upsert_agent(empid, name, email, phone="", channel="", employment_status="Induction"):
     conn = get_connection()
     conn.execute("""
-        INSERT INTO agents (empid, name, email, phone) 
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?
-    """, (empid, name, email, phone, name, email, phone))
+        INSERT INTO agents (empid, name, email, phone, channel, employment_status) 
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(empid) DO UPDATE SET 
+            name=excluded.name, 
+            email=excluded.email, 
+            phone=excluded.phone,
+            channel=excluded.channel,
+            employment_status=excluded.employment_status
+    """, (empid, name, email, phone, channel, employment_status))
     
     conn.execute("""
         INSERT INTO evaluations (empid, agent_name) 
         VALUES (?, ?)
-        ON CONFLICT(empid) DO UPDATE SET agent_name=?
-    """, (empid, name, name))
+        ON CONFLICT(empid) DO UPDATE SET agent_name=excluded.agent_name
+    """, (empid, name))
     
+    conn.commit()
+    conn.close()
+
+def update_agent_status(empid, new_status):
+    conn = get_connection()
+    conn.execute("UPDATE agents SET employment_status=? WHERE empid=?", (new_status, empid))
+    conn.commit()
+    conn.close()
+
+def bulk_upsert_agents(df):
+    conn = get_connection()
+    for _, row in df.iterrows():
+        empid = str(row.get('EMP ID', '')).strip()
+        name = str(row.get('Name', '')).strip()
+        email = str(row.get('Email', '')).strip()
+        channel = str(row.get('Channel', '')).strip()
+        emp_status = str(row.get('Employment Status', 'Induction')).strip()
+        
+        if emp_status not in ["Existing", "Resigned", "Induction"]:
+            emp_status = "Induction"
+
+        if empid and name:
+            conn.execute("""
+                INSERT INTO agents (empid, name, email, phone, channel, employment_status) 
+                VALUES (?, ?, ?, '', ?, ?)
+                ON CONFLICT(empid) DO UPDATE SET 
+                    name=excluded.name, 
+                    email=excluded.email, 
+                    channel=excluded.channel,
+                    employment_status=excluded.employment_status
+            """, (empid, name, email, channel, emp_status))
+            
+            conn.execute("""
+                INSERT INTO evaluations (empid, agent_name) 
+                VALUES (?, ?)
+                ON CONFLICT(empid) DO UPDATE SET agent_name=excluded.agent_name
+            """, (empid, name))
+            
     conn.commit()
     conn.close()
 
@@ -193,6 +230,8 @@ def delete_agent(empid):
     conn.execute("DELETE FROM evaluations WHERE empid=?", (empid,))
     conn.commit()
     conn.close()
+
+# --- Other DB Functions ---
 
 def get_topics():
     conn = get_connection()
@@ -224,7 +263,6 @@ def insert_self_training_log(log_id, empid, name, channel, topic_name):
     access_time = row['access_time'] if row else ""
     conn.close()
 
-    # Sync to Google Sheets: "Self Training Log"
     sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time)])
 
 def get_self_training_logs():
@@ -240,7 +278,6 @@ def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, st
     conn.commit()
     conn.close()
 
-    # Sync each slot item to Google Sheets: "Induction Calender"
     if full_schedule_output and isinstance(full_schedule_output, list):
         for item in full_schedule_output:
             sync_to_gsheet("Induction Calender", [
@@ -293,7 +330,6 @@ def update_evaluation(empid, q1, q2, q3, ass, mock, live, final_score):
     conn.commit()
     conn.close()
 
-    # Sync to Google Sheets: "Agent Evaluation"
     sync_to_gsheet("Agent Evaluation", [empid, agent_name, q1, q2, q3, ass, mock, live, final_score])
 
 def insert_refresher_request(req_dict):
@@ -305,7 +341,6 @@ def insert_refresher_request(req_dict):
     conn.commit()
     conn.close()
 
-    # Sync to Google Sheets: "Refresher Requests"
     sync_to_gsheet("Refresher Requests", [
         req_dict['id'],
         req_dict['empid'],
@@ -317,7 +352,6 @@ def insert_refresher_request(req_dict):
     ])
 
 def assign_refresher_by_admin(empid, name, channel, topic_name, preferred_slot):
-    """Allows Admin to directly assign a Refresher Training to an existing agent."""
     req_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute("""
@@ -327,7 +361,6 @@ def assign_refresher_by_admin(empid, name, channel, topic_name, preferred_slot):
     conn.commit()
     conn.close()
 
-    # Google Sheets Sync
     sync_to_gsheet("Refresher Requests", [
         req_id,
         empid,
