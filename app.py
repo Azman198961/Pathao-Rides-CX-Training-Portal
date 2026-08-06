@@ -11,7 +11,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 import db
-from certificate import generate_certificate
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 
@@ -247,6 +246,7 @@ if is_admin_view:
                 total_trainings = len(df_logs)
                 completed_trainings = len(df_logs[df_logs['status'] == 'Completed'])
                 delayed_trainings = len(df_logs[df_logs['status'] == 'Delayed'])
+                in_progress = len(df_logs[df_logs['status'] == 'In Progress'])
                 avg_quiz = df_logs[df_logs['status'] == 'Completed']['quiz_score'].mean() if completed_trainings > 0 else 0.0
 
                 m1, m2, m3, m4 = st.columns(4)
@@ -632,6 +632,7 @@ else:
 
             st.divider()
 
+            # ডাটাবেস থেকে এক্টিভ ট্রেইনিং চেক (২৪ ঘণ্টা লজিক ও ইমেইল নোটিফিকেশন সহ)
             active_session = db.get_active_agent_training(emp_id)
 
             if active_session:
@@ -667,81 +668,28 @@ else:
                             st.rerun()
 
                     elif st.session_state[step_key] == "quiz":
-                        st.subheader("Step 2 of 2: Interactive Assessment Quiz & Certificate")
-                        
-                        questions = [
-                            {
-                                "id": 1,
-                                "question": "পাঠাও সিএক্স পলিসি অনুযায়ী কাস্টমার রিফান্ড রিকোয়েস্ট কত সময়ের মধ্যে প্রসেস করতে হয়?",
-                                "options": ["২৪ ঘণ্টা", "৪৮ ঘণ্টা", "৭২ ঘণ্টা", "তাৎক্ষণিক"],
-                                "answer": "২৪ ঘণ্টা"
-                            },
-                            {
-                                "id": 2,
-                                "question": "কল ট্রান্সফার করার সময় এজেন্টকে প্রথমে কি করতে হবে?",
-                                "options": ["সরাসরি ট্রান্সফার করা", "কাস্টমারকে হোল্ডে রেখে অনুমতি নেওয়া", "কল কেটে দেওয়া", "সুপারভাইজারকে মেসেজ দেওয়া"],
-                                "answer": "কাস্টমারকে হোল্ডে রেখে অনুমতি নেওয়া"
-                            }
-                        ]
-                        
-                        user_answers = {}
-                        d_reason_val = ""
+                        st.subheader("Step 2 of 2: Submit Evaluation Quiz & Score")
+                        embed_form = format_form_url(selected_topic.get("form_url", ""))
+                        if embed_form: st.iframe(embed_form, height=600)
 
-                        with st.form("quiz_submit_form"):
-                            st.write("#### 📝 কুইজের প্রশ্ন উত্তর দিন:")
-                            for q in questions:
-                                user_answers[q["id"]] = st.radio(f"**Q{q['id']}. {q['question']}**", q["options"], key=f"q_{q['id']}")
-                                st.divider()
-
+                        st.markdown("---")
+                        with st.form("quiz_score_submit_form"):
+                            st.caption("Enter your obtained Quiz score (%) to mark completion:")
+                            q_score = st.number_input("Quiz Score (%) *", min_value=0.0, max_value=100.0, value=80.0)
+                            
+                            d_reason_val = ""
                             if is_delayed:
                                 st.markdown("### 📝 Reason for Delay Required *")
                                 d_reason_val = st.text_area("২৪ ঘণ্টার বেশি দেরি হওয়ার কারণ লিখুন *", placeholder="যেমন: নাইট শিফট ডিউটি থাকার কারণে কুইজটি সময়মতো শেষ করা সম্ভব হয়নি।", key="delay_input_box")
 
-                            submitted = st.form_submit_button("✅ Submit Quiz & Complete Module")
-
-                            if submitted:
+                            if st.form_submit_button("✅ Submit Quiz & Complete Training"):
                                 if is_delayed and not d_reason_val.strip():
                                     st.error("⚠️ ট্রেইনিং ডিলে হওয়ার কারণ উল্লেখ করা বাধ্যতামূলক!")
                                 else:
-                                    correct_count = sum(1 for q in questions if user_answers[q["id"]] == q["answer"])
-                                    total_q = len(questions)
-                                    score_pct = (correct_count / total_q) * 100
-
-                                    db.mark_self_training_complete(
-                                        active_session['id'], 
-                                        score=score_pct, 
-                                        delay_reason=d_reason_val.strip() if is_delayed else "On Time"
-                                    )
-                                    
-                                    st.session_state[f"completed_score_{active_session['id']}"] = score_pct
-                                    st.session_state[f"completed_topic_{active_session['id']}"] = active_session['topic_name']
-                                    st.session_state[step_key] = "completed"
+                                    db.mark_self_training_complete(active_session['id'], score=q_score, delay_reason=d_reason_val.strip() if is_delayed else "On Time")
+                                    st.success("🎉 Congratulations! Training marked as Completed.")
+                                    st.session_state.pop(step_key, None)
                                     st.rerun()
-
-                    elif st.session_state[step_key] == "completed":
-                        score_pct = st.session_state.get(f"completed_score_{active_session['id']}", 0.0)
-                        topic_name_val = st.session_state.get(f"completed_topic_{active_session['id']}", active_session['topic_name'])
-
-                        st.markdown(f"### 🎉 মূল্যায়ন সম্পন্ন হয়েছে!")
-                        st.write(f"আপনার অর্জিত প্রাপ্ত স্কোর: **{score_pct:.1f}%**")
-
-                        if score_pct >= 80.0:
-                            st.success("🏆 অভিনন্দন! আপনি সফলভাবে এই মডিউলটি পাস করেছেন (৮০%+ স্কোর)।")
-                            today_str = date.today().strftime("%d %B, %Y")
-                            cert_pdf = generate_certificate(emp_name, topic_name_val, score_pct, today_str)
-
-                            st.download_button(
-                                label="📜 Download Official Training Certificate (PDF)",
-                                data=cert_pdf,
-                                file_name=f"Pathao_Certificate_{emp_name.replace(' ', '_')}.pdf",
-                                mime="application/pdf"
-                            )
-                        else:
-                            st.warning("⚠️ আপনি পাসিং মার্কস (80%) অর্জন করতে পারেননি। সার্টিফিকেট ইস্যু করা হয়নি।")
-
-                        if st.button("🔄 Return to Dashboard"):
-                            st.session_state.pop(step_key, None)
-                            st.rerun()
 
             else:
                 st.subheader("📚 Start New Training Module")
