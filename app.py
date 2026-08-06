@@ -15,7 +15,6 @@ import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 
-# Safe DB Initialization
 try:
     db.init_db()
 except Exception as e:
@@ -96,7 +95,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     buffer.seek(0)
     return buffer
 
-# Auth State
+# Session State
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
@@ -123,7 +122,6 @@ with st.sidebar:
 
     st.sidebar.divider()
     if st.sidebar.button("🧪 Test Google Sheet Connection"):
-        import db
         try:
             db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02"])
             st.sidebar.success("Test Data Sent Successfully!")
@@ -226,36 +224,114 @@ if is_admin_view:
                 mime="text/csv"
             )
 
-    # 1. AGENT DIRECTORY
+    # 1. AGENT DIRECTORY (Bulk Upload & Live Status Update)
     with admin_tab1:
-        st.header("👥 Induction Agent Information Directory")
-        with st.expander("➕ Add / Edit Agent Record", expanded=False):
-            with st.form("agent_info_form"):
-                col1, col2 = st.columns(2)
-                ag_id = col1.text_input("EMP ID *")
-                ag_name = col2.text_input("Agent Name *")
-                col3, col4 = st.columns(2)
-                ag_email = col3.text_input("Email Address *")
-                ag_phone = col4.text_input("Phone Number *")
-                
+        st.header("👥 Agent Information Directory")
+        st.caption("Upload employee database via CSV/Excel or manage records manually.")
+
+        col_left, col_right = st.columns([1.5, 1])
+
+        # Bulk Upload Section
+        with col_left:
+            st.subheader("📤 Bulk Upload Employee Sheet")
+            uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx", "xls"])
+
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        df_upload = pd.read_csv(uploaded_file)
+                    else:
+                        df_upload = pd.read_excel(uploaded_file)
+
+                    df_upload.columns = df_upload.columns.str.strip()
+
+                    required_cols = {"EMP ID", "Name", "Email", "Channel", "Employment Status"}
+                    if not required_cols.issubset(set(df_upload.columns)):
+                        st.error(f"❌ Uploaded file must contain these exact columns: `{', '.join(required_cols)}`")
+                    else:
+                        st.write("Preview Upload Data:", df_upload.head(3))
+                        if st.button("🚀 Process & Import Data", type="primary"):
+                            db.bulk_upsert_agents(df_upload)
+                            st.success("✅ Employee database updated successfully!")
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"Error reading file: {e}")
+
+        # Manual Single Entry Section
+        with col_right:
+            st.subheader("➕ Add Single Agent")
+            with st.form("add_single_agent_form"):
+                m_empid = st.text_input("EMP ID *")
+                m_name = st.text_input("Name *")
+                m_email = st.text_input("Email *")
+                m_channel = st.selectbox("Channel *", CHANNEL_OPTIONS)
+                m_status = st.selectbox("Employment Status *", ["Existing", "Induction", "Resigned"])
+
                 if st.form_submit_button("💾 Save Agent"):
-                    if not ag_id or not ag_name or not ag_email:
+                    if not m_empid or not m_name or not m_email:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
-                        try:
-                            db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
-                            st.success("Agent Info saved successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to save agent: {e}")
+                        db.upsert_agent(
+                            m_empid.strip(), 
+                            m_name.strip(), 
+                            m_email.strip(), 
+                            channel=m_channel, 
+                            employment_status=m_status
+                        )
+                        st.success(f"Agent {m_name} saved successfully!")
+                        st.rerun()
 
+        st.divider()
+
+        # Directory Table & Status Management
+        st.subheader("📋 Registered Agents Directory")
         agents = db.get_agents()
-        if agents:
-            st.dataframe(pd.DataFrame(agents), width="stretch")
-            for ag in agents:
-                if st.button(f"🗑️ Delete {ag['name']}", key=f"del_ag_{ag['empid']}"):
-                    db.delete_agent(ag['empid'])
-                    st.rerun()
+
+        if not agents:
+            st.info("No agents found. Upload a sheet or add an agent above.")
+        else:
+            status_filter = st.multiselect(
+                "Filter by Employment Status:", 
+                ["Existing", "Induction", "Resigned"], 
+                default=["Existing", "Induction", "Resigned"]
+            )
+
+            filtered_agents = [ag for ag in agents if ag.get("employment_status", "Induction") in status_filter]
+
+            if not filtered_agents:
+                st.warning("No records match the selected filter.")
+            else:
+                for ag in filtered_agents:
+                    with st.container():
+                        c_id, c_name, c_email, c_chan, c_stat, c_del = st.columns([1, 1.5, 2, 1.5, 1.5, 0.8])
+                        
+                        c_id.write(f"**{ag['empid']}**")
+                        c_name.write(ag['name'])
+                        c_email.write(ag['email'])
+                        c_chan.write(ag.get('channel', 'N/A'))
+
+                        current_status = ag.get('employment_status', 'Induction')
+                        status_options = ["Existing", "Induction", "Resigned"]
+                        curr_index = status_options.index(current_status) if current_status in status_options else 1
+
+                        new_status = c_stat.selectbox(
+                            "Status", 
+                            status_options, 
+                            index=curr_index, 
+                            key=f"status_sel_{ag['empid']}", 
+                            label_visibility="collapsed"
+                        )
+
+                        if new_status != current_status:
+                            db.update_agent_status(ag['empid'], new_status)
+                            st.toast(f"Updated {ag['name']}'s status to {new_status}")
+                            st.rerun()
+
+                        if c_del.button("🗑️", key=f"del_ag_{ag['empid']}"):
+                            db.delete_agent(ag['empid'])
+                            st.toast(f"Removed {ag['name']}")
+                            st.rerun()
 
     # 2. TOPICS & QUIZ EDITOR
     with admin_tab2:
