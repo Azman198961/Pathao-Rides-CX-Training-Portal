@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import uuid
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from io import BytesIO
 
 from reportlab.lib.pagesizes import letter
@@ -14,7 +14,7 @@ import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 
-# Custom UI Styling for Modern Dashboard Cards
+# Custom UI Styling for Modern Dashboard Cards & Visual Update Badges
 st.markdown("""
 <style>
     .admin-card {
@@ -25,12 +25,24 @@ st.markdown("""
         margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    .metric-card {
-        background: linear-gradient(135deg, #1f2937, #111827);
-        border-left: 4px solid #ef4444;
-        padding: 15px;
-        border-radius: 8px;
-        color: white;
+    .update-badge {
+        background-color: #064e3b;
+        color: #34d399;
+        border: 1px solid #059669;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 0.9rem;
+        display: inline-block;
+        margin-bottom: 10px;
+    }
+    .reason-box {
+        background-color: #1f2937;
+        border-left: 4px solid #3b82f6;
+        padding: 10px 14px;
+        border-radius: 4px;
+        margin-top: 8px;
+        margin-bottom: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -153,7 +165,6 @@ st.title("Pathao Rides — CX Training Portal")
 CHANNEL_OPTIONS = ["Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
 
 if is_admin_view:
-    # Categorized Navigation Group
     admin_group = st.radio(
         "🗂️ Navigation Groups:",
         ["📈 Dashboards", "⚙️ Operations & Planning", "👥 Employee Management & Logs"],
@@ -165,7 +176,6 @@ if is_admin_view:
     if admin_group == "📈 Dashboards":
         dash_type = st.radio("Select Dashboard View:", ["🎓 Induction Performance Dashboard", "📖 Self-Training Performance Dashboard"], horizontal=True)
         
-        # 1A. INDUCTION DASHBOARD
         if dash_type == "🎓 Induction Performance Dashboard":
             st.header("🎓 Induction Training Performance Dashboard")
             st.caption("Connected directly to Induction Batch Evaluations.")
@@ -213,7 +223,6 @@ if is_admin_view:
             pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_ind_evals)
             st.download_button("📄 Download Induction Summary PDF", pdf_bytes, "Induction_Performance_Summary.pdf", "application/pdf")
 
-        # 1B. SELF TRAINING DASHBOARD
         elif dash_type == "📖 Self-Training Performance Dashboard":
             st.header("📖 Self-Training Performance Dashboard")
             st.caption("Analytics derived from agent self-learning modules & quizzes.")
@@ -264,12 +273,17 @@ if is_admin_view:
         with op_tab1:
             st.header("📅 Induction Training Planner & Editor")
             
-            # Check for Editing State
+            # Message check after update rerun
+            if st.session_state.get("show_update_success", False):
+                st.success("✅ Calendar successfully updated and saved to database!")
+                st.session_state.show_update_success = False
+
+            # Check if we are currently editing an existing calendar schedule
             editing_sched_id = st.session_state.get("editing_sched_id", None)
             
             if editing_sched_id:
-                st.info(f"✏️ **Editing Existing Calendar Schedule (ID: {editing_sched_id[:8]}...)**")
-                if st.button("❌ Cancel Edit & Create New Calendar"):
+                st.warning(f"✏️ **Editing Calendar Schedule ID:** `{editing_sched_id}`")
+                if st.button("❌ Cancel Edit Mode"):
                     st.session_state.editing_sched_id = None
                     st.session_state.current_planner = None
                     st.rerun()
@@ -326,70 +340,89 @@ if is_admin_view:
                 st.divider()
                 
                 # Reason Box for Audit Trail
-                edit_reason_input = st.text_area("📝 Change Log / Reason for Update *", placeholder="Specify what changed in this calendar (e.g. Changed Fare topic trainer, rescheduled Friday session)", key="edit_reason_field")
+                edit_reason_input = st.text_area("📝 What changed? / Reason for Update *", placeholder="Specify what was edited in this calendar (e.g. Shifted Friday session to Saturday, updated trainer name)", key="edit_reason_field")
 
                 if editing_sched_id:
                     if st.button("💾 Update & Re-Publish Calendar", type="primary"):
                         if not edit_reason_input.strip():
-                            st.error("⚠️ Please provide a reason for editing this calendar schedule!")
+                            st.error("⚠️ Reason for editing is required before updating!")
                         else:
                             db.update_batch_schedule(editing_sched_id, json.dumps(full_schedule_output), "Updated", edit_reason_input.strip(), full_schedule_output)
-                            st.success("Calendar updated and logged successfully!")
+                            st.toast("✅ Calendar updated successfully!", icon="🎉")
+                            st.session_state.show_update_success = True
                             st.session_state.editing_sched_id = None
                             st.session_state.current_planner = None
                             st.rerun()
                 else:
                     if st.button("🚀 Save & Publish Calendar", type="primary"):
                         sched_id = str(uuid.uuid4())
-                        reason = edit_reason_input.strip() if edit_reason_input.strip() else "Initial Schedule Creation"
+                        reason = edit_reason_input.strip() if edit_reason_input.strip() else "Initial Calendar Creation"
                         db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress", edit_reason=reason, full_schedule_output=full_schedule_output)
-                        st.success("Calendar published successfully!")
+                        st.toast("✅ New Calendar published successfully!", icon="🚀")
                         st.session_state.current_planner = None
                         st.rerun()
 
             st.divider()
-            st.subheader("📁 Saved Calendars Tracker & Audit Logs")
+            st.subheader("📁 Saved Calendars Tracker & Change Logs")
             batches = db.get_batch_schedules()
-            for b in batches:
-                with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']}) — Status: `{b['status']}`"):
-                    st.caption(f"🕒 **Last Updated:** {b.get('last_updated', 'N/A')}")
-                    st.info(f"📝 **Last Change Reason / Log:** {b.get('edit_reason', 'No reason specified')}")
+            
+            if not batches:
+                st.info("No published calendars found.")
+            else:
+                for b in batches:
+                    is_recently_updated = (b.get('status') == 'Updated')
                     
-                    data_list = json.loads(b['schedule_json'])
-                    df_sched = pd.DataFrame(data_list)
-                    st.dataframe(df_sched, width="stretch")
-
-                    col_ed, col_rm = st.columns([1.5, 4])
-                    if col_ed.button("✏️ Edit Calendar", key=f"edit_btn_{b['id']}"):
-                        st.session_state.editing_sched_id = b['id']
+                    with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']}) — Status: `{b['status']}`"):
                         
-                        dates_in_batch = sorted(list(set([item['Date'] for item in data_list if 'Date' in item])))
-                        day_slots = {}
-                        for d in dates_in_batch:
-                            day_slots[d] = []
-                            for item in data_list:
-                                if item.get('Date') == d and item.get('Activity / Topic') != 'DAY OFF':
-                                    day_slots[d].append({
-                                        "type": "Topic Session",
-                                        "topic": item.get('Activity / Topic'),
-                                        "custom": item.get('Activity / Topic'),
-                                        "time": item.get('Time Slot'),
-                                        "trainer": item.get('Trainer'),
-                                        "off": False
-                                    })
+                        # Visible Badge Showing Updated Status
+                        if is_recently_updated:
+                            st.markdown(f"""
+                            <div class="update-badge">
+                                ✨ UPDATED CALENDAR | Last Modified: {b.get('last_updated', 'N/A')}
+                            </div>
+                            <div class="reason-box">
+                                💬 <b>Change Log / Reason:</b> {b.get('edit_reason', 'No details provided')}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.caption(f"🕒 Created On: {b.get('last_updated', 'N/A')}")
+                            st.caption(f"📝 Initial Note: {b.get('edit_reason', 'N/A')}")
                         
-                        st.session_state.current_planner = {
-                            "batch": b['batch_name'],
-                            "from": b['start_date'],
-                            "to": b['end_date'],
-                            "dates": dates_in_batch,
-                            "day_slots": day_slots
-                        }
-                        st.rerun()
+                        data_list = json.loads(b['schedule_json'])
+                        df_sched = pd.DataFrame(data_list)
+                        st.dataframe(df_sched, width="stretch")
 
-                    if col_rm.button("🗑️ Delete Schedule", key=f"del_sch_{b['id']}"):
-                        db.delete_batch_schedule(b['id'])
-                        st.rerun()
+                        col_ed, col_rm = st.columns([1.5, 4])
+                        if col_ed.button("✏️ Edit Calendar", key=f"edit_btn_{b['id']}"):
+                            st.session_state.editing_sched_id = b['id']
+                            
+                            dates_in_batch = sorted(list(set([item['Date'] for item in data_list if 'Date' in item])))
+                            day_slots = {}
+                            for d in dates_in_batch:
+                                day_slots[d] = []
+                                for item in data_list:
+                                    if item.get('Date') == d and item.get('Activity / Topic') != 'DAY OFF':
+                                        day_slots[d].append({
+                                            "type": "Topic Session",
+                                            "topic": item.get('Activity / Topic'),
+                                            "custom": item.get('Activity / Topic'),
+                                            "time": item.get('Time Slot'),
+                                            "trainer": item.get('Trainer'),
+                                            "off": False
+                                        })
+                            
+                            st.session_state.current_planner = {
+                                "batch": b['batch_name'],
+                                "from": b['start_date'],
+                                "to": b['end_date'],
+                                "dates": dates_in_batch,
+                                "day_slots": day_slots
+                            }
+                            st.rerun()
+
+                        if col_rm.button("🗑️ Delete Schedule", key=f"del_sch_{b['id']}"):
+                            db.delete_batch_schedule(b['id'])
+                            st.rerun()
 
         # EVALUATION SYSTEM (Filtered ONLY for Employment Status = Induction)
         with op_tab2:
@@ -544,7 +577,6 @@ if is_admin_view:
                     db.delete_agent(ag['empid'])
                     st.rerun()
 
-        # LOGS (Quiz Score Visible)
         with emp_tab2:
             st.header("📖 Self Training Activity Logs & Quiz Scores")
             logs = db.get_self_training_logs()
