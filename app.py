@@ -247,7 +247,7 @@ if is_admin_view:
 
         with dash_sub2:
             st.header("📘 Self Training Performance Dashboard")
-            st.caption("This dashboard analyzes self-learning engagement and self-quiz scores from logs.")
+            st.caption("This dashboard analyzes self-learning engagement, status, and quiz scores from logs.")
             
             logs = db.get_self_training_logs()
             df_logs = pd.DataFrame(logs) if logs else pd.DataFrame()
@@ -259,9 +259,11 @@ if is_admin_view:
                 s_col1.metric("Total Self-Training Sessions", len(df_logs))
                 s_col2.metric("Unique Participating Employees", df_logs['empid'].nunique())
                 
+                completed_count = len(df_logs[df_logs['status'] == 'Completed']) if 'status' in df_logs else len(df_logs)
+                s_col3.metric("Completed Modules", completed_count)
+                
                 avg_q_score = df_logs['quiz_score'].mean() if 'quiz_score' in df_logs else 0.0
-                s_col3.metric("Avg Self-Quiz Score", f"{avg_q_score:.1f}%")
-                s_col4.metric("Top Topic", df_logs['topic_name'].mode()[0] if not df_logs['topic_name'].empty else "N/A")
+                s_col4.metric("Avg Self-Quiz Score", f"{avg_q_score:.1f}%")
 
                 st.divider()
                 
@@ -275,9 +277,12 @@ if is_admin_view:
 
                 with sc_right:
                     st.markdown("<div class='card-box-info'>", unsafe_allow_html=True)
-                    st.markdown("### 📌 Engagement by Channel")
-                    chan_counts = df_logs['channel'].value_counts()
-                    st.bar_chart(chan_counts)
+                    st.markdown("### 📌 Engagement Status Distribution")
+                    if 'status' in df_logs:
+                        stat_counts = df_logs['status'].value_counts()
+                        st.bar_chart(stat_counts)
+                    else:
+                        st.info("Status data not available yet.")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='card-box'>", unsafe_allow_html=True)
@@ -292,7 +297,7 @@ if is_admin_view:
 
     # 1. SELF TRAINING LOGS
     with admin_tab_logs:
-        st.header("📖 Self Training Activity Logs & Quiz Scores")
+        st.header("📖 Self Training Activity Logs & Statuses")
         logs = db.get_self_training_logs()
         if not logs:
             st.info("No self-training activities logged yet.")
@@ -301,7 +306,8 @@ if is_admin_view:
             
             st.markdown("<div class='card-box'>", unsafe_allow_html=True)
             st.subheader("📋 Logs Overview")
-            st.dataframe(df_logs[['id', 'empid', 'name', 'channel', 'topic_name', 'quiz_score', 'access_time']], use_container_width=True)
+            show_cols = [c for c in ['id', 'empid', 'name', 'channel', 'topic_name', 'status', 'start_time', 'completion_time', 'delay_reason', 'quiz_score', 'access_time'] if c in df_logs.columns]
+            st.dataframe(df_logs[show_cols], use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
             with st.expander("📝 Update Employee Self-Quiz Score", expanded=False):
@@ -653,11 +659,11 @@ else:
         all_topics = db.get_topics()
         topic_names = [t["name"] for t in all_topics] if all_topics else []
 
-        if "active_self_topic" not in st.session_state:
+        if "active_self_log" not in st.session_state:
             st.subheader("📚 Start Self Training Module")
-            st.caption("Enter your details and select a topic to open training materials.")
+            st.caption("Enter your EMP ID to check existing session or start a new training module.")
             
-            with st.form("self_training_start_form"):
+            with st.form("self_training_check_start_form"):
                 c1, c2 = st.columns(2)
                 s_name = c1.text_input("Employee Name *")
                 s_empid = c2.text_input("EMP ID *")
@@ -666,45 +672,91 @@ else:
                 s_channel = c3.selectbox("Channel *", ["-- Select Channel --"] + CHANNEL_OPTIONS)
                 s_topic = c4.selectbox("Select Training Topic *", ["-- Select Topic --"] + topic_names)
                 
-                if st.form_submit_button("🚀 Start Training"):
-                    if not s_name or not s_empid or s_channel == "-- Select Channel --" or s_topic == "-- Select Topic --":
-                        st.error("All fields marked with (*) are required!")
+                if st.form_submit_button("🚀 Start / Resume Training"):
+                    if not s_empid.strip():
+                        st.error("EMP ID is required to proceed!")
                     else:
-                        selected_obj = next((t for t in all_topics if t["name"] == s_topic), None)
-                        if selected_obj:
-                            log_id = str(uuid.uuid4())
-                            db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic, 0.0)
-                            
-                            st.session_state.active_self_topic = selected_obj
-                            st.session_state.current_agent_empid = s_empid.strip()
-                            st.session_state.current_agent_name = s_name.strip()
+                        active_log = db.get_active_self_training(s_empid.strip())
+                        if active_log:
+                            st.warning(f"⚠️ You have an uncompleted training session! Topic: '{active_log['topic_name']}' (Status: {active_log['status']}). Redirecting...")
+                            st.session_state.active_self_log = active_log
+                            st.session_state.self_step = "slide"
                             st.rerun()
+                        else:
+                            if not s_name or s_channel == "-- Select Channel --" or s_topic == "-- Select Topic --":
+                                st.error("All fields marked with (*) are required for starting new training!")
+                            else:
+                                selected_obj = next((t for t in all_topics if t["name"] == s_topic), None)
+                                if selected_obj:
+                                    log_id = str(uuid.uuid4())
+                                    db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic, 0.0)
+                                    new_log = db.get_active_self_training(s_empid.strip())
+                                    st.session_state.active_self_log = new_log
+                                    st.session_state.self_step = "slide"
+                                    st.session_state.current_agent_empid = s_empid.strip()
+                                    st.session_state.current_agent_name = s_name.strip()
+                                    st.rerun()
         else:
-            selected_topic = st.session_state.active_self_topic
+            log_data = st.session_state.active_self_log
+            current_status = log_data.get("status", "In Progress")
+            selected_topic = next((t for t in all_topics if t["name"] == log_data['topic_name']), None)
             
-            if st.button("⬅️ Back to Topic Selection"):
-                st.session_state.pop("active_self_topic", None)
-                st.rerun()
+            # Auto-check if 24 hours passed for currently opened session
+            fresh_log = db.get_active_self_training(log_data['empid'])
+            if fresh_log:
+                log_data = fresh_log
+                st.session_state.active_self_log = fresh_log
+                current_status = log_data.get("status", "In Progress")
 
-            st.markdown(f"## 📊 Module: **{selected_topic['name']}**")
-            st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'Md Asikul islam Azman')}")
+            st.markdown(f"## 📊 Module: **{log_data['topic_name']}**")
+            st.caption(f"👤 Employee: **{log_data['name']}** (`{log_data['empid']}`) | Status: **`{current_status}`**")
 
-            content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Auto Loaded Quiz"])
-            
-            with content_tab1:
-                embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
-                if embed_slide:
-                    st.components.v1.iframe(embed_slide, height=560, scrolling=False)
+            if current_status == "Delayed":
+                st.error("🚨 This training session was marked as **Delayed** because 24 hours have passed since it started. You must provide a delay reason to complete the training.")
+
+            # NO BACK BUTTON ALLOWED AS PER REQUIREMENTS
+            current_step = st.session_state.get("self_step", "slide")
+
+            if current_step == "slide":
+                st.subheader("📺 Step 1: Study Presentation Slides")
+                if selected_topic and selected_topic.get("slide_url"):
+                    embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
+                    st.components.v1.iframe(embed_slide, height=580, scrolling=False)
                 else:
-                    st.warning("No Slide Presentation available.")
+                    st.warning("No Slide Presentation link available.")
+
+                st.divider()
+                if st.button("➡️ Overview Completed: Proceed to Quiz Assessment", type="primary"):
+                    st.session_state.self_step = "quiz"
+                    st.rerun()
+
+            elif current_step == "quiz":
+                st.subheader("📝 Step 2: Assessment Quiz & Completion")
+                if selected_topic and selected_topic.get("form_url"):
+                    embed_form = format_form_url(selected_topic.get("form_url", ""))
+                    st.components.v1.iframe(embed_form, height=650, scrolling=True)
+                else:
+                    st.info("No Quiz Form link added for this topic.")
+
+                st.divider()
+                st.markdown("### 🏁 Submit Assessment & Finish Training")
+                
+                with st.form("complete_training_form"):
+                    delay_reason_text = ""
+                    if current_status == "Delayed":
+                        delay_reason_text = st.text_area("Why was this training delayed? (Reason required) *", value=log_data.get("delay_reason", ""))
                     
-            with content_tab2:
-                embed_form = format_form_url(selected_topic.get("form_url", ""))
-                if embed_form:
-                    st.subheader("📝 Module Assessment Quiz")
-                    st.components.v1.iframe(embed_form, height=700, scrolling=True)
-                else:
-                    st.info("No Quiz Form link added for this topic yet.")
+                    self_score = st.number_input("Self-Reported Quiz Score / Score Received (%) *", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+                    
+                    if st.form_submit_button("✅ Mark Training as Completed"):
+                        if current_status == "Delayed" and not delay_reason_text.strip():
+                            st.error("Delay reason is compulsory since this training was delayed!")
+                        else:
+                            db.complete_self_training_log(log_data['id'], self_score, delay_reason_text.strip())
+                            st.success("🎉 Training successfully completed! Status updated in training log.")
+                            st.session_state.pop("active_self_log", None)
+                            st.session_state.pop("self_step", None)
+                            st.rerun()
 
     # 2. MY CERTIFICATE TAB
     with agent_tab2:
