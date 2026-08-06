@@ -1,6 +1,9 @@
 import sqlite3
 import json
+import smtplib
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 DB_NAME = "portal.db"
 
@@ -94,6 +97,54 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+# ----------------- EMAIL NOTIFICATION SYSTEM -----------------
+
+def send_delay_email(agent_empid, agent_name, topic_name, access_time):
+    # Gmail SMTP Credentials
+    SENDER_EMAIL = "asikul.islam@pathao.com"  # আপনার ইমেইল আইডি
+    SENDER_PASSWORD = "nbjpnsbbaslhuozn"    # Google App Password
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT email FROM agents WHERE empid = ?", (agent_empid,))
+    agent_row = cursor.fetchone()
+    conn.close()
+    
+    receiver_email = agent_row['email'] if agent_row and agent_row['email'] else SENDER_EMAIL
+
+    subject = f"⚠️ Overdue Training Alert: {topic_name} (Delayed)"
+    
+    body = f"""
+    Hi {agent_name},
+
+    System generated alert: You started the self-training module "{topic_name}" on {access_time}. 
+    More than 24 hours have passed, and the module has not been completed yet.
+
+    Status: MARKED AS DELAYED 🔴
+
+    Please log in to the CX Training Portal as soon as possible to review the module and submit the quiz. 
+    Note: You will be required to provide a valid reason for this delay prior to final quiz submission.
+
+    Best regards,
+    Pathao CX Training Automation System
+    """
+
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = receiver_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"✅ Delay notification email sent to {receiver_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
 
 # ----------------- AGENT DIRECTORY -----------------
 
@@ -290,7 +341,6 @@ def get_active_agent_training(empid):
         access_time_str = log_dict['access_time']
         status = log_dict['status']
         
-        # ২৪ ঘণ্টা পার হয়েছে কিনা চেক করা
         try:
             start_dt = datetime.strptime(access_time_str, "%Y-%m-%d %H:%M:%S")
         except Exception:
@@ -299,7 +349,12 @@ def get_active_agent_training(empid):
         if datetime.now() - start_dt > timedelta(hours=24) and status == 'In Progress':
             status = 'Delayed'
             log_dict['status'] = 'Delayed'
+            
+            # ১. ডাটাবেসে স্ট্যাটাস আপডেট
             update_training_status_to_delayed(log_dict['id'])
+            
+            # ২. অটোমেটিক ইমেইল পাঠানো
+            send_delay_email(log_dict['empid'], log_dict['name'], log_dict['topic_name'], log_dict['access_time'])
 
         return log_dict
     return None
@@ -357,8 +412,7 @@ def get_refresher_requests():
     conn.close()
     return [dict(r) for r in reqs]
 
-# ----------------- GOOGLE SHEET SYNC (OPTIONAL) -----------------
+# ----------------- GOOGLE SHEET SYNC -----------------
 
 def sync_to_gsheet(sheet_name, row_data):
-    # Google Sheet sync placeholder logic
     pass
