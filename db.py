@@ -50,11 +50,18 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def add_column_if_not_exists(cursor, table_name, column_name, column_def):
+    """Helper to safely add a column to an existing table."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column_name not in columns:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Agents Table (with Channel & Employment Status)
+    # 1. Agents Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             empid TEXT PRIMARY KEY,
@@ -65,8 +72,10 @@ def init_db():
             employment_status TEXT DEFAULT 'Induction'
         )
     """)
-    
-    # Topics Table
+    add_column_if_not_exists(cursor, "agents", "channel", "TEXT DEFAULT ''")
+    add_column_if_not_exists(cursor, "agents", "employment_status", "TEXT DEFAULT 'Induction'")
+
+    # 2. Topics Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             id TEXT PRIMARY KEY,
@@ -78,7 +87,7 @@ def init_db():
         )
     """)
     
-    # Self Training Logs (with 'status' column)
+    # 3. Self Training Logs
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -90,8 +99,9 @@ def init_db():
             status TEXT DEFAULT 'In Progress'
         )
     """)
+    add_column_if_not_exists(cursor, "self_training_logs", "status", "TEXT DEFAULT 'In Progress'")
     
-    # Batch Schedules
+    # 4. Batch Schedules
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS batch_schedules (
             id TEXT PRIMARY KEY,
@@ -103,7 +113,7 @@ def init_db():
         )
     """)
     
-    # Evaluations
+    # 5. Evaluations
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS evaluations (
             empid TEXT PRIMARY KEY,
@@ -118,7 +128,7 @@ def init_db():
         )
     """)
     
-    # Refresher Requests
+    # 6. Refresher Requests
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS refresher_requests (
             id TEXT PRIMARY KEY,
@@ -132,7 +142,8 @@ def init_db():
             training_status TEXT DEFAULT 'Pending'
         )
     """)
-    
+    add_column_if_not_exists(cursor, "refresher_requests", "training_status", "TEXT DEFAULT 'Pending'")
+
     conn.commit()
     
     # Seeding Default Topics
@@ -338,8 +349,7 @@ def update_schedule_json_and_status(sched_id, json_str, status=None):
 def delete_batch_schedule(sched_id):
     conn = get_connection()
     conn.execute("DELETE FROM batch_schedules WHERE id=?", (sched_id,))
-    conn.commit()
-    conn.close()
+    conn.commit().close()
 
 def get_evaluations():
     conn = get_connection()
