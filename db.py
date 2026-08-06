@@ -78,7 +78,7 @@ def init_db():
         )
     """)
     
-    # Self Training Logs
+    # Self Training Logs (with 'status' column)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -86,7 +86,8 @@ def init_db():
             name TEXT,
             channel TEXT,
             topic_name TEXT,
-            access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'In Progress'
         )
     """)
     
@@ -156,7 +157,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Agent Management Functions ---
+# --- Agent Management ---
 
 def get_agents():
     conn = get_connection()
@@ -231,6 +232,54 @@ def delete_agent(empid):
     conn.commit()
     conn.close()
 
+# --- Self Training Core Logic ---
+
+def get_active_agent_training(empid):
+    """Checks if the agent has an unfinished ('In Progress') training."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT * FROM self_training_logs 
+        WHERE empid = ? AND status = 'In Progress' 
+        ORDER BY access_time DESC LIMIT 1
+    """, (empid,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def insert_self_training_log(log_id, empid, name, channel, topic_name):
+    """Creates a new self-training log with status 'In Progress'."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, status) 
+        VALUES (?, ?, ?, ?, ?, 'In Progress')
+    """, (log_id, empid, name, channel, topic_name))
+    conn.commit()
+    
+    row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
+    access_time = row['access_time'] if row else ""
+    conn.close()
+
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time), "In Progress"])
+
+def mark_self_training_complete(log_id):
+    """Updates status to 'Completed' in DB and syncs status to GSheet."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE self_training_logs SET status = 'Completed' WHERE id = ?", (log_id,))
+    
+    row = cursor.execute("SELECT empid, name, channel, topic_name, access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
+    conn.commit()
+    conn.close()
+
+    if row:
+        sync_to_gsheet("Self Training Log", [log_id, row['empid'], row['name'], row['channel'], row['topic_name'], str(row['access_time']), "Completed"])
+
+def get_self_training_logs():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM self_training_logs ORDER BY access_time DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 # --- Other DB Functions ---
 
 def get_topics():
@@ -251,25 +300,6 @@ def upsert_topic(topic_dict):
     ))
     conn.commit()
     conn.close()
-
-def insert_self_training_log(log_id, empid, name, channel, topic_name):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name) VALUES (?, ?, ?, ?, ?)",
-                   (log_id, empid, name, channel, topic_name))
-    conn.commit()
-    
-    row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
-    access_time = row['access_time'] if row else ""
-    conn.close()
-
-    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time)])
-
-def get_self_training_logs():
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM self_training_logs ORDER BY access_time DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
 
 def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, status, full_schedule_output=None):
     conn = get_connection()
