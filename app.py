@@ -14,7 +14,6 @@ import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 
-# Custom UI Styling
 st.markdown("""
 <style>
     .admin-card {
@@ -580,7 +579,6 @@ if is_admin_view:
             logs = db.get_self_training_logs()
             if logs:
                 df_logs = pd.DataFrame(logs)
-                # Display table with Delay Reasons if present
                 st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time', 'status', 'quiz_score', 'delay_reason']], width="stretch")
             else:
                 st.info("No logs available.")
@@ -634,7 +632,7 @@ else:
 
             st.divider()
 
-            # ডাটাবেস থেকে এক্টিভ ট্রেইনিং লগ চেক করা (২৪ ঘণ্টা চেক লজিক সহ)
+            # ডাটাবেস থেকে এক্টিভ ট্রেইনিং চেক (২৪ ঘণ্টা লজিক ও ইমেইল নোটিফিকেশন সহ)
             active_session = db.get_active_agent_training(emp_id)
 
             if active_session:
@@ -646,7 +644,7 @@ else:
                         ⚠️ DELAYED TRAINING LOCK | Time limit exceeded (>24 Hours)
                     </div>
                     """, unsafe_allow_html=True)
-                    st.error(f"আপনি **{active_session['topic_name']}** ট্রেইনিংটি ২৪ ঘণ্টার মধ্যে শেষ করেননি। কুইজ জমা দেওয়ার পূর্বে বিলম্বের সঠিক কারণ উল্লেখ করা বাধ্যতামূলক।")
+                    st.error(f"আপনি **{active_session['topic_name']}** ট্রেইনিংটি ২৪ ঘণ্টার মধ্যে শেষ করেননি। কুইজ জমা দেওয়ার পূর্বে বিলম্বের কারণ উল্লেখ করা বাধ্যতামূলক।")
                 else:
                     st.warning(f"⚠️ **In-Progress Training Lock:** You have an unfinished training session on **{active_session['topic_name']}**.")
 
@@ -679,7 +677,6 @@ else:
                             st.caption("Enter your obtained Quiz score (%) to mark completion:")
                             q_score = st.number_input("Quiz Score (%) *", min_value=0.0, max_value=100.0, value=80.0)
                             
-                            # Delayed হলে কারণ দর্শানোর ফিল্ড দেখাবে
                             d_reason_val = ""
                             if is_delayed:
                                 st.markdown("### 📝 Reason for Delay Required *")
