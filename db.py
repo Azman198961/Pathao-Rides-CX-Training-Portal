@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 DB_FILE = "training_portal.db"
 SPREADSHEET_ID = "1dDmSYFVG_cMEOAZgxaTG4Gd_hPl-S8Dc1XeDgpLCP6U"
@@ -84,7 +85,7 @@ def init_db():
         )
     """)
     
-    # 3. Self Training Logs (Quiz Score Added)
+    # 3. Self Training Logs (Quiz Score Included)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -100,7 +101,7 @@ def init_db():
     add_column_if_not_exists(cursor, "self_training_logs", "status", "TEXT DEFAULT 'In Progress'")
     add_column_if_not_exists(cursor, "self_training_logs", "quiz_score", "REAL DEFAULT 0.0")
     
-    # 4. Batch Schedules
+    # 4. Batch Schedules (Audit & Edit Reason Logic)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS batch_schedules (
             id TEXT PRIMARY KEY,
@@ -108,9 +109,13 @@ def init_db():
             start_date TEXT,
             end_date TEXT,
             schedule_json TEXT,
-            status TEXT
+            status TEXT,
+            edit_reason TEXT DEFAULT '',
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    add_column_if_not_exists(cursor, "batch_schedules", "edit_reason", "TEXT DEFAULT ''")
+    add_column_if_not_exists(cursor, "batch_schedules", "last_updated", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     
     # 5. Evaluations
     cursor.execute("""
@@ -166,7 +171,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Agent Core Management ---
+# --- Agent Operations ---
 
 def get_agents(status_filter=None):
     conn = get_connection()
@@ -244,7 +249,7 @@ def delete_agent(empid):
     conn.commit()
     conn.close()
 
-# --- Self Training Core Logic ---
+# --- Self Training Operations ---
 
 def get_active_agent_training(empid):
     conn = get_connection()
@@ -289,10 +294,10 @@ def get_self_training_logs():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- Induction Evaluation Logic ---
+# --- Induction Evaluation Operations ---
 
 def get_induction_evaluations():
-    """Returns evaluation scorecards ONLY for agents currently in 'Induction' status."""
+    """Only fetches evaluations of agents with Employment Status = 'Induction'"""
     conn = get_connection()
     query = """
         SELECT e.*, a.employment_status, a.channel 
@@ -323,10 +328,15 @@ def upsert_topic(topic_dict):
     conn.commit()
     conn.close()
 
-def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, status, full_schedule_output=None):
+# --- Batch Calendar Schedule & Edit Audit Operations ---
+
+def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, status, edit_reason="", full_schedule_output=None):
     conn = get_connection()
-    conn.execute("INSERT INTO batch_schedules (id, batch_name, start_date, end_date, schedule_json, status) VALUES (?, ?, ?, ?, ?, ?)",
-                 (sched_id, batch_name, start_date, end_date, json_str, status))
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("""
+        INSERT INTO batch_schedules (id, batch_name, start_date, end_date, schedule_json, status, edit_reason, last_updated) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (sched_id, batch_name, start_date, end_date, json_str, status, edit_reason, now_str))
     conn.commit()
     conn.close()
 
@@ -342,20 +352,35 @@ def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, st
                 item.get("Status", "")
             ])
 
-def get_batch_schedules():
+def update_batch_schedule(sched_id, json_str, status, edit_reason, full_schedule_output=None):
+    """Updates calendar and records reason for change"""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM batch_schedules ORDER BY rowid DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-def update_schedule_json_and_status(sched_id, json_str, status=None):
-    conn = get_connection()
-    if status:
-        conn.execute("UPDATE batch_schedules SET schedule_json=?, status=? WHERE id=?", (json_str, status, sched_id))
-    else:
-        conn.execute("UPDATE batch_schedules SET schedule_json=? WHERE id=?", (json_str, sched_id))
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("""
+        UPDATE batch_schedules 
+        SET schedule_json=?, status=?, edit_reason=?, last_updated=? 
+        WHERE id=?
+    """, (json_str, status, edit_reason, now_str, sched_id))
     conn.commit()
     conn.close()
+
+    if full_schedule_output and isinstance(full_schedule_output, list):
+        for item in full_schedule_output:
+            sync_to_gsheet("Induction Calender", [
+                f"Updated Batch ID: {sched_id[:6]}",
+                item.get("Date", ""),
+                item.get("Day", ""),
+                item.get("Activity / Topic", ""),
+                item.get("Time Slot", ""),
+                item.get("Trainer", ""),
+                item.get("Status", "")
+            ])
+
+def get_batch_schedules():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM batch_schedules ORDER BY last_updated DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def delete_batch_schedule(sched_id):
     conn = get_connection()
@@ -394,13 +419,7 @@ def insert_refresher_request(req_dict):
     conn.close()
 
     sync_to_gsheet("Refresher Requests", [
-        req_dict['id'],
-        req_dict['empid'],
-        req_dict['name'],
-        req_dict['channel'],
-        req_dict['topic_name'],
-        req_dict['preferred_slot'],
-        "Pending"
+        req_dict['id'], req_dict['empid'], req_dict['name'], req_dict['channel'], req_dict['topic_name'], req_dict['preferred_slot'], "Pending"
     ])
 
 def assign_refresher_by_admin(empid, name, channel, topic_name, preferred_slot):
@@ -413,15 +432,7 @@ def assign_refresher_by_admin(empid, name, channel, topic_name, preferred_slot):
     conn.commit()
     conn.close()
 
-    sync_to_gsheet("Refresher Requests", [
-        req_id,
-        empid,
-        name,
-        channel,
-        topic_name,
-        preferred_slot,
-        "Assigned by Admin"
-    ])
+    sync_to_gsheet("Refresher Requests", [req_id, empid, name, channel, topic_name, preferred_slot, "Assigned by Admin"])
 
 def get_refresher_requests():
     conn = get_connection()
