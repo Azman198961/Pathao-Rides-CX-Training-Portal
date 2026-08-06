@@ -12,9 +12,9 @@ from reportlab.lib import colors
 
 import db
 try:
-    import certificate as cert_generator
-except ImportError:
     import cert_generator
+except ImportError:
+    import certificate as cert_generator
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
@@ -154,7 +154,7 @@ if is_admin_view:
     admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "📈 Dashboard",
         "📖 Training Logs",
-        "👥 Employee Data", # Updated Tab Name
+        "👥 Employee Data",
         "📊 Topics & Quiz Editor", 
         "🖥️ Training Viewer", 
         "📅 Calendar Planner", 
@@ -292,7 +292,7 @@ if is_admin_view:
 
             st.download_button("📥 Export Logs (CSV)", df_logs.to_csv(index=False).encode('utf-8'), "Self_Training_Logs.csv", "text/csv")
 
-    # 2. EMPLOYEE DATA (NEW FILE UPLOAD & UPDATED ENTRY FORM)
+    # 2. EMPLOYEE DATA
     with admin_tab1:
         st.header("👥 Employee Data & Employment Status")
         
