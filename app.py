@@ -14,7 +14,7 @@ import db
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 
-# Custom UI Styling for Modern Dashboard Cards & Visual Update Badges
+# Custom UI Styling
 st.markdown("""
 <style>
     .admin-card {
@@ -29,6 +29,17 @@ st.markdown("""
         background-color: #064e3b;
         color: #34d399;
         border: 1px solid #059669;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 0.9rem;
+        display: inline-block;
+        margin-bottom: 10px;
+    }
+    .delay-badge {
+        background-color: #7f1d1d;
+        color: #fca5a5;
+        border: 1px solid #dc2626;
         padding: 6px 12px;
         border-radius: 6px;
         font-weight: bold;
@@ -235,13 +246,14 @@ if is_admin_view:
             else:
                 total_trainings = len(df_logs)
                 completed_trainings = len(df_logs[df_logs['status'] == 'Completed'])
+                delayed_trainings = len(df_logs[df_logs['status'] == 'Delayed'])
                 in_progress = len(df_logs[df_logs['status'] == 'In Progress'])
                 avg_quiz = df_logs[df_logs['status'] == 'Completed']['quiz_score'].mean() if completed_trainings > 0 else 0.0
 
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Enrolled", total_trainings)
                 m2.metric("Completed Modules", completed_trainings)
-                m3.metric("In-Progress Lock", in_progress)
+                m3.metric("⚠️ Delayed Modules (>24h)", delayed_trainings)
                 m4.metric("Avg Quiz Score", f"{avg_quiz:.1f}%")
 
                 st.divider()
@@ -273,12 +285,10 @@ if is_admin_view:
         with op_tab1:
             st.header("📅 Induction Training Planner & Editor")
             
-            # Message check after update rerun
             if st.session_state.get("show_update_success", False):
                 st.success("✅ Calendar successfully updated and saved to database!")
                 st.session_state.show_update_success = False
 
-            # Check if we are currently editing an existing calendar schedule
             editing_sched_id = st.session_state.get("editing_sched_id", None)
             
             if editing_sched_id:
@@ -338,9 +348,7 @@ if is_admin_view:
                             st.rerun()
 
                 st.divider()
-                
-                # Reason Box for Audit Trail
-                edit_reason_input = st.text_area("📝 What changed? / Reason for Update *", placeholder="Specify what was edited in this calendar (e.g. Shifted Friday session to Saturday, updated trainer name)", key="edit_reason_field")
+                edit_reason_input = st.text_area("📝 What changed? / Reason for Update *", placeholder="Specify what was edited in this calendar", key="edit_reason_field")
 
                 if editing_sched_id:
                     if st.button("💾 Update & Re-Publish Calendar", type="primary"):
@@ -373,8 +381,6 @@ if is_admin_view:
                     is_recently_updated = (b.get('status') == 'Updated')
                     
                     with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']}) — Status: `{b['status']}`"):
-                        
-                        # Visible Badge Showing Updated Status
                         if is_recently_updated:
                             st.markdown(f"""
                             <div class="update-badge">
@@ -395,7 +401,6 @@ if is_admin_view:
                         col_ed, col_rm = st.columns([1.5, 4])
                         if col_ed.button("✏️ Edit Calendar", key=f"edit_btn_{b['id']}"):
                             st.session_state.editing_sched_id = b['id']
-                            
                             dates_in_batch = sorted(list(set([item['Date'] for item in data_list if 'Date' in item])))
                             day_slots = {}
                             for d in dates_in_batch:
@@ -403,20 +408,14 @@ if is_admin_view:
                                 for item in data_list:
                                     if item.get('Date') == d and item.get('Activity / Topic') != 'DAY OFF':
                                         day_slots[d].append({
-                                            "type": "Topic Session",
-                                            "topic": item.get('Activity / Topic'),
-                                            "custom": item.get('Activity / Topic'),
-                                            "time": item.get('Time Slot'),
-                                            "trainer": item.get('Trainer'),
-                                            "off": False
+                                            "type": "Topic Session", "topic": item.get('Activity / Topic'),
+                                            "custom": item.get('Activity / Topic'), "time": item.get('Time Slot'),
+                                            "trainer": item.get('Trainer'), "off": False
                                         })
                             
                             st.session_state.current_planner = {
-                                "batch": b['batch_name'],
-                                "from": b['start_date'],
-                                "to": b['end_date'],
-                                "dates": dates_in_batch,
-                                "day_slots": day_slots
+                                "batch": b['batch_name'], "from": b['start_date'],
+                                "to": b['end_date'], "dates": dates_in_batch, "day_slots": day_slots
                             }
                             st.rerun()
 
@@ -424,13 +423,12 @@ if is_admin_view:
                             db.delete_batch_schedule(b['id'])
                             st.rerun()
 
-        # EVALUATION SYSTEM (Filtered ONLY for Employment Status = Induction)
+        # EVALUATION SYSTEM
         with op_tab2:
             st.header("📝 Induction Agent Evaluation System")
             st.caption("Only showing Agents with Employment Status = 'Induction'")
             
             induction_evals = db.get_induction_evaluations()
-            
             if not induction_evals:
                 st.warning("No agents currently set to 'Induction' status in Agent Directory.")
             else:
@@ -578,11 +576,12 @@ if is_admin_view:
                     st.rerun()
 
         with emp_tab2:
-            st.header("📖 Self Training Activity Logs & Quiz Scores")
+            st.header("📖 Self Training Activity Logs & Delay Reports")
             logs = db.get_self_training_logs()
             if logs:
                 df_logs = pd.DataFrame(logs)
-                st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time', 'status', 'quiz_score']], width="stretch")
+                # Display table with Delay Reasons if present
+                st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time', 'status', 'quiz_score', 'delay_reason']], width="stretch")
             else:
                 st.info("No logs available.")
 
@@ -635,11 +634,21 @@ else:
 
             st.divider()
 
+            # ডাটাবেস থেকে এক্টিভ ট্রেইনিং লগ চেক করা (২৪ ঘণ্টা চেক লজিক সহ)
             active_session = db.get_active_agent_training(emp_id)
 
             if active_session:
-                st.warning(f"⚠️ **In-Progress Training Lock:** You have an unfinished training session on **{active_session['topic_name']}**.")
-                st.caption("You cannot start a new topic until you complete this training slide and submit the quiz.")
+                is_delayed = (active_session['status'] == 'Delayed')
+                
+                if is_delayed:
+                    st.markdown("""
+                    <div class="delay-badge">
+                        ⚠️ DELAYED TRAINING LOCK | Time limit exceeded (>24 Hours)
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.error(f"আপনি **{active_session['topic_name']}** ট্রেইনিংটি ২৪ ঘণ্টার মধ্যে শেষ করেননি। কুইজ জমা দেওয়ার পূর্বে বিলম্বের সঠিক কারণ উল্লেখ করা বাধ্যতামূলক।")
+                else:
+                    st.warning(f"⚠️ **In-Progress Training Lock:** You have an unfinished training session on **{active_session['topic_name']}**.")
 
                 selected_topic = next((t for t in all_topics if t["name"] == active_session['topic_name']), None)
 
@@ -670,11 +679,20 @@ else:
                             st.caption("Enter your obtained Quiz score (%) to mark completion:")
                             q_score = st.number_input("Quiz Score (%) *", min_value=0.0, max_value=100.0, value=80.0)
                             
+                            # Delayed হলে কারণ দর্শানোর ফিল্ড দেখাবে
+                            d_reason_val = ""
+                            if is_delayed:
+                                st.markdown("### 📝 Reason for Delay Required *")
+                                d_reason_val = st.text_area("২৪ ঘণ্টার বেশি দেরি হওয়ার কারণ লিখুন *", placeholder="যেমন: নাইট শিফট ডিউটি থাকার কারণে কুইজটি সময়মতো শেষ করা সম্ভব হয়নি।", key="delay_input_box")
+
                             if st.form_submit_button("✅ Submit Quiz & Complete Training"):
-                                db.mark_self_training_complete(active_session['id'], score=q_score)
-                                st.success("🎉 Congratulations! Training marked as Completed.")
-                                st.session_state.pop(step_key, None)
-                                st.rerun()
+                                if is_delayed and not d_reason_val.strip():
+                                    st.error("⚠️ ট্রেইনিং ডিলে হওয়ার কারণ উল্লেখ করা বাধ্যতামূলক!")
+                                else:
+                                    db.mark_self_training_complete(active_session['id'], score=q_score, delay_reason=d_reason_val.strip() if is_delayed else "On Time")
+                                    st.success("🎉 Congratulations! Training marked as Completed.")
+                                    st.session_state.pop(step_key, None)
+                                    st.rerun()
 
             else:
                 st.subheader("📚 Start New Training Module")
