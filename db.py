@@ -9,7 +9,6 @@ DB_FILE = "training_portal.db"
 SPREADSHEET_ID = "1dDmSYFVG_cMEOAZgxaTG4Gd_hPl-S8Dc1XeDgpLCP6U"
 
 def sync_to_gsheet(sheet_name, row_data):
-    """Appends a new row to the specified tab in Google Sheets using Sheet ID."""
     try:
         if "gcp_service_account" not in st.secrets:
             st.error("❌ GSheet Sync Failed: 'gcp_service_account' missing in Streamlit Secrets!")
@@ -31,7 +30,6 @@ def sync_to_gsheet(sheet_name, row_data):
 
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
-        
         sh = gc.open_by_key(SPREADSHEET_ID)
         
         try:
@@ -51,7 +49,6 @@ def get_connection():
     return conn
 
 def add_column_if_not_exists(cursor, table_name, column_name, column_def):
-    """Helper to safely add a column to an existing table."""
     cursor.execute(f"PRAGMA table_info({table_name})")
     columns = [row[1] for row in cursor.fetchall()]
     if column_name not in columns:
@@ -87,7 +84,7 @@ def init_db():
         )
     """)
     
-    # 3. Self Training Logs
+    # 3. Self Training Logs (Quiz Score Added)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -96,10 +93,12 @@ def init_db():
             channel TEXT,
             topic_name TEXT,
             access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status TEXT DEFAULT 'In Progress'
+            status TEXT DEFAULT 'In Progress',
+            quiz_score REAL DEFAULT 0.0
         )
     """)
     add_column_if_not_exists(cursor, "self_training_logs", "status", "TEXT DEFAULT 'In Progress'")
+    add_column_if_not_exists(cursor, "self_training_logs", "quiz_score", "REAL DEFAULT 0.0")
     
     # 4. Batch Schedules
     cursor.execute("""
@@ -146,7 +145,6 @@ def init_db():
 
     conn.commit()
     
-    # Seeding Default Topics
     exact_topics = [
         ("t1", "Fare", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed", ""),
         ("t2", "Joining Process", "02:00 HR", "Md Asikul islam Azman", "https://docs.google.com/presentation/d/1AxdbPQSPr0Cmlx9HjZPS_jHtj-xgjNMGlXHZcfF9MQ4/embed", ""),
@@ -168,11 +166,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Agent Management ---
+# --- Agent Core Management ---
 
-def get_agents():
+def get_agents(status_filter=None):
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM agents").fetchall()
+    if status_filter:
+        rows = conn.execute("SELECT * FROM agents WHERE employment_status = ?", (status_filter,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM agents").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -246,7 +247,6 @@ def delete_agent(empid):
 # --- Self Training Core Logic ---
 
 def get_active_agent_training(empid):
-    """Checks if the agent has an unfinished ('In Progress') training."""
     conn = get_connection()
     row = conn.execute("""
         SELECT * FROM self_training_logs 
@@ -257,12 +257,11 @@ def get_active_agent_training(empid):
     return dict(row) if row else None
 
 def insert_self_training_log(log_id, empid, name, channel, topic_name):
-    """Creates a new self-training log with status 'In Progress'."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, status) 
-        VALUES (?, ?, ?, ?, ?, 'In Progress')
+        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, status, quiz_score) 
+        VALUES (?, ?, ?, ?, ?, 'In Progress', 0.0)
     """, (log_id, empid, name, channel, topic_name))
     conn.commit()
     
@@ -270,20 +269,19 @@ def insert_self_training_log(log_id, empid, name, channel, topic_name):
     access_time = row['access_time'] if row else ""
     conn.close()
 
-    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time), "In Progress"])
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time), "In Progress", 0.0])
 
-def mark_self_training_complete(log_id):
-    """Updates status to 'Completed' in DB and syncs status to GSheet."""
+def mark_self_training_complete(log_id, score=0.0):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE self_training_logs SET status = 'Completed' WHERE id = ?", (log_id,))
+    cursor.execute("UPDATE self_training_logs SET status = 'Completed', quiz_score = ? WHERE id = ?", (score, log_id))
     
     row = cursor.execute("SELECT empid, name, channel, topic_name, access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
     conn.commit()
     conn.close()
 
     if row:
-        sync_to_gsheet("Self Training Log", [log_id, row['empid'], row['name'], row['channel'], row['topic_name'], str(row['access_time']), "Completed"])
+        sync_to_gsheet("Self Training Log", [log_id, row['empid'], row['name'], row['channel'], row['topic_name'], str(row['access_time']), "Completed", score])
 
 def get_self_training_logs():
     conn = get_connection()
@@ -291,7 +289,20 @@ def get_self_training_logs():
     conn.close()
     return [dict(r) for r in rows]
 
-# --- Other DB Functions ---
+# --- Induction Evaluation Logic ---
+
+def get_induction_evaluations():
+    """Returns evaluation scorecards ONLY for agents currently in 'Induction' status."""
+    conn = get_connection()
+    query = """
+        SELECT e.*, a.employment_status, a.channel 
+        FROM evaluations e
+        INNER JOIN agents a ON e.empid = a.empid
+        WHERE a.employment_status = 'Induction'
+    """
+    rows = conn.execute(query).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def get_topics():
     conn = get_connection()
@@ -349,7 +360,8 @@ def update_schedule_json_and_status(sched_id, json_str, status=None):
 def delete_batch_schedule(sched_id):
     conn = get_connection()
     conn.execute("DELETE FROM batch_schedules WHERE id=?", (sched_id,))
-    conn.commit().close()
+    conn.commit()
+    conn.close()
 
 def get_evaluations():
     conn = get_connection()
