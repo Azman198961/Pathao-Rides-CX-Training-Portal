@@ -2,6 +2,9 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 import gspread
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
 
@@ -14,6 +17,44 @@ def get_current_bst_time():
 
 DB_FILE = "training_portal.db"
 SPREADSHEET_NAME = "Rides CX Training Portal"
+
+def send_delayed_email(agent_email, agent_name, topic_name):
+    """Sends an automated email notification when a training becomes delayed."""
+    try:
+        if "smtp" not in st.secrets:
+            return
+
+        smtp_server = st.secrets["smtp"]["server"]
+        smtp_port = st.secrets["smtp"]["port"]
+        sender_email = st.secrets["smtp"]["sender_email"]
+        sender_password = st.secrets["smtp"]["sender_password"]
+
+        msg = MIMEMultipart()
+        msg['From'] = f"Pathao CX Academy <{sender_email}>"
+        msg['To'] = agent_email
+        msg['Subject'] = f"🔴 Training Delayed Alert: {topic_name}"
+
+        body = f"""
+        Dear {agent_name},
+
+        Your self-training module "{topic_name}" has crossed the 24-hour limit and is now marked as DELAYED.
+
+        Please log in to the Pathao CX Training Portal immediately, provide the reason for the delay, and submit your quiz assessment to complete the module.
+
+        Best regards,
+        Pathao CX Quality & Training Team
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+        st.toast(f"📧 Delay email sent to {agent_email}")
+    except Exception as e:
+        st.error(f"❌ Failed to send delay email to {agent_email}: {e}")
 
 def sync_to_gsheet(sheet_name, row_data):
     """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
@@ -194,9 +235,19 @@ def init_db():
     conn.close()
 
 def auto_update_delayed_trainings():
-    """Checks for 'In Progress' training sessions older than 24 hours (BST) and updates status to 'Delayed'."""
+    """Checks for 'In Progress' training sessions older than 24 hours (BST), updates status to 'Delayed', and sends email."""
     conn = get_connection()
     cutoff_time = (datetime.now(BST) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 1. Fetch trainings that are about to be marked as Delayed
+    delayed_rows = conn.execute("""
+        SELECT l.id, l.empid, l.name, l.topic_name, a.email 
+        FROM self_training_logs l
+        LEFT JOIN agents a ON l.empid = a.empid
+        WHERE l.status = 'In Progress' AND (l.start_time <= ? OR (l.start_time IS NULL AND l.access_time <= ?))
+    """, (cutoff_time, cutoff_time)).fetchall()
+
+    # 2. Update status in database
     conn.execute("""
         UPDATE self_training_logs 
         SET status = 'Delayed' 
@@ -204,6 +255,14 @@ def auto_update_delayed_trainings():
     """, (cutoff_time, cutoff_time))
     conn.commit()
     conn.close()
+
+    # 3. Send notification email to each delayed agent
+    for row in delayed_rows:
+        agent_email = row['email']
+        agent_name = row['name']
+        topic_name = row['topic_name']
+        if agent_email:
+            send_delayed_email(agent_email, agent_name, topic_name)
 
 def get_agents(status_filter=None):
     conn = get_connection()
@@ -351,7 +410,7 @@ def update_schedule_json_and_status(sched_id, json_str, status=None):
     if status:
         conn.execute("UPDATE batch_schedules SET schedule_json=?, status=? WHERE id=?", (json_str, status, sched_id))
     else:
-        conn.execute("UPDATE batch_schedules SET schedule_json=? WHERE id=?", (json_str, sched_id))
+        conn.execute("UPDATE batch_schedules SET schedule_json=? WHERE id=?", (json_str, status, sched_id))
     conn.commit()
     conn.close()
 
