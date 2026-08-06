@@ -121,6 +121,15 @@ with st.sidebar:
             st.session_state.is_admin = False
             st.rerun()
 
+    st.sidebar.divider()
+    if st.sidebar.button("🧪 Test Google Sheet Connection"):
+        import db
+        try:
+            db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02"])
+            st.sidebar.success("Test Data Sent Successfully!")
+        except Exception as e:
+            st.sidebar.error(f"Test Failed: {e}")
+
 is_admin_view = (role == "Admin View" and st.session_state.is_admin)
 
 st.title("Pathao Rides — CX Training Portal")
@@ -128,7 +137,7 @@ st.title("Pathao Rides — CX Training Portal")
 CHANNEL_OPTIONS = ["Inbound Voice", "Live Chat & Social Media", "Report Issue & Email", "Complaint Management", "Campaign Management"]
 
 if is_admin_view:
-    admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
+    admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5, admin_tab6 = st.tabs([
         "📈 Performance Dashboard",
         "📖 Self Training Logs",
         "👥 Agent Directory", 
@@ -136,7 +145,8 @@ if is_admin_view:
         "🖥️ Training Viewer", 
         "📅 Induction Calendar Planner", 
         "📝 Agent Evaluation", 
-        "🔁 Refresher Requests"
+        "🔁 Refresher Requests",
+        "🎯 Admin Refresher Assignment"
     ])
     
     # 0. PERFORMANCE DASHBOARD
@@ -472,6 +482,69 @@ if is_admin_view:
                                     db.update_refresher_status(req['id'], "Rejected", reason.strip(), "Cancelled")
                                     st.rerun()
 
+    # 6. ADMIN REFRESHER ASSIGNMENT FOR EXISTING EMPLOYEES
+    with admin_tab6:
+        st.header("🎯 Arrange Refresher Training for Existing Employees")
+        st.caption("Assign specialized refresher modules to existing agents based on QA performance or new SOP updates.")
+
+        agents_list = db.get_agents()
+        topics_list = db.get_topics()
+        
+        agent_names = [f"{ag['name']} ({ag['empid']})" for ag in agents_list] if agents_list else []
+        topic_names = [t["name"] for t in topics_list] if topics_list else []
+
+        with st.form("admin_assign_refresher_form"):
+            st.subheader("➕ Create New Refresher Assignment")
+            
+            c1, c2 = st.columns(2)
+            selected_agent_str = c1.selectbox("Select Existing Agent *", ["-- Select Agent --"] + agent_names)
+            manual_emp_id = c2.text_input("OR Enter EMP ID Manually (if not in directory)")
+            
+            c3, c4 = st.columns(2)
+            agent_channel = c3.selectbox("Channel *", ["-- Select Channel --"] + CHANNEL_OPTIONS)
+            refresher_topic = c4.selectbox("Select Refresher Topic *", ["-- Select Topic --"] + topic_names)
+            
+            c5, c6 = st.columns(2)
+            assign_date = c5.date_input("Scheduled Training Date *", value=date.today())
+            assign_time = c6.selectbox("Time Slot *", ["-- Select Slot --", "10:00 AM - 01:00 PM", "02:00 PM - 05:00 PM", "05:00 PM - 08:00 PM"])
+
+            if st.form_submit_button("🚀 Assign Refresher Training"):
+                final_name = ""
+                final_empid = ""
+
+                if selected_agent_str != "-- Select Agent --":
+                    final_name = selected_agent_str.split(" (")[0]
+                    final_empid = selected_agent_str.split("(")[1].replace(")", "")
+                elif manual_emp_id.strip():
+                    final_empid = manual_emp_id.strip()
+                    final_name = "Existing Employee"
+
+                if not final_empid or agent_channel == "-- Select Channel --" or refresher_topic == "-- Select Topic --" or assign_time == "-- Select Slot --":
+                    st.error("Please fill in all required (*) fields!")
+                else:
+                    try:
+                        slot_info = f"{assign_date.strftime('%d %b %Y')} ({assign_time})"
+                        db.assign_refresher_by_admin(final_empid, final_name, agent_channel, refresher_topic, slot_info)
+                        st.success(f"✅ Refresher Training successfully assigned to {final_name} ({final_empid})!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error assigning refresher: {e}")
+
+        st.divider()
+        st.subheader("📋 Assigned Refresher Trainings Tracker")
+        
+        all_reqs = db.get_refresher_requests()
+        admin_assigned = [r for r in all_reqs if r.get("status") == "Assigned by Admin"]
+
+        if not admin_assigned:
+            st.info("No Refresher Trainings assigned by Admin yet.")
+        else:
+            df_assigned = pd.DataFrame(admin_assigned)
+            st.dataframe(
+                df_assigned[['empid', 'name', 'channel', 'topic_name', 'preferred_slot', 'training_status']], 
+                width="stretch"
+            )
+
 else:
     # AGENT WORKSPACE PORTAL
     st.header("Agent Self-Service Hub")
@@ -571,11 +644,3 @@ else:
                         st.success("Training Request submitted successfully!")
                     except Exception as e:
                         st.error(f"Error submitting request: {e}")
-                        st.sidebar.divider()
-if st.sidebar.button("🧪 Test Google Sheet Connection"):
-    import db
-    try:
-        db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02"])
-        st.sidebar.success("Test Data Sent Successfully!")
-    except Exception as e:
-        st.sidebar.error(f"Test Failed: {e}")
