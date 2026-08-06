@@ -247,7 +247,6 @@ if is_admin_view:
                 total_trainings = len(df_logs)
                 completed_trainings = len(df_logs[df_logs['status'] == 'Completed'])
                 delayed_trainings = len(df_logs[df_logs['status'] == 'Delayed'])
-                in_progress = len(df_logs[df_logs['status'] == 'In Progress'])
                 avg_quiz = df_logs[df_logs['status'] == 'Completed']['quiz_score'].mean() if completed_trainings > 0 else 0.0
 
                 m1, m2, m3, m4 = st.columns(4)
@@ -633,7 +632,6 @@ else:
 
             st.divider()
 
-            # Active Training Check (with 24h delay logic)
             active_session = db.get_active_agent_training(emp_id)
 
             if active_session:
@@ -671,7 +669,6 @@ else:
                     elif st.session_state[step_key] == "quiz":
                         st.subheader("Step 2 of 2: Interactive Assessment Quiz & Certificate")
                         
-                        # --- DYNAMIC QUIZ INTEGRATION ---
                         questions = [
                             {
                                 "id": 1,
