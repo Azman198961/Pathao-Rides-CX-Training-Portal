@@ -6,9 +6,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 
 def generate_certificate(agent_name: str, topic_name: str, score: float, date_str: str) -> bytes:
-    """
-    Generates a PDF certificate in memory using ReportLab and returns raw bytes.
-    """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -26,7 +23,7 @@ def generate_certificate(agent_name: str, topic_name: str, score: float, date_st
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
         fontSize=30,
-        textColor=colors.HexColor('#E21B24'), # Pathao Brand Red
+        textColor=colors.HexColor('#E21B24'),
         alignment=TA_CENTER,
         spaceAfter=15
     )
