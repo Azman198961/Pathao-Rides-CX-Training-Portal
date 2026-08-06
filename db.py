@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime, timedelta
 
 DB_FILE = "training_portal.db"
 SPREADSHEET_NAME = "Rides CX Training Portal"
@@ -67,7 +68,7 @@ def init_db():
         )
     """)
     
-    # Self Training Logs
+    # Self Training Logs Table with Status & Delays
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -76,7 +77,11 @@ def init_db():
             channel TEXT,
             topic_name TEXT,
             quiz_score REAL DEFAULT 0.0,
-            access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'In Progress',
+            start_time TIMESTAMP,
+            completion_time TIMESTAMP,
+            delay_reason TEXT DEFAULT ''
         )
     """)
     
@@ -84,6 +89,14 @@ def init_db():
     log_cols = [col[1] for col in cursor.fetchall()]
     if 'quiz_score' not in log_cols:
         cursor.execute("ALTER TABLE self_training_logs ADD COLUMN quiz_score REAL DEFAULT 0.0")
+    if 'status' not in log_cols:
+        cursor.execute("ALTER TABLE self_training_logs ADD COLUMN status TEXT DEFAULT 'In Progress'")
+    if 'start_time' not in log_cols:
+        cursor.execute("ALTER TABLE self_training_logs ADD COLUMN start_time TIMESTAMP")
+    if 'completion_time' not in log_cols:
+        cursor.execute("ALTER TABLE self_training_logs ADD COLUMN completion_time TIMESTAMP")
+    if 'delay_reason' not in log_cols:
+        cursor.execute("ALTER TABLE self_training_logs ADD COLUMN delay_reason TEXT DEFAULT ''")
 
     # Batch Schedules
     cursor.execute("""
@@ -173,6 +186,18 @@ def init_db():
     conn.commit()
     conn.close()
 
+def auto_update_delayed_trainings():
+    """Checks for 'In Progress' training sessions older than 24 hours and updates status to 'Delayed'."""
+    conn = get_connection()
+    cutoff_time = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("""
+        UPDATE self_training_logs 
+        SET status = 'Delayed' 
+        WHERE status = 'In Progress' AND (start_time <= ? OR (start_time IS NULL AND access_time <= ?))
+    """, (cutoff_time, cutoff_time))
+    conn.commit()
+    conn.close()
+
 def get_agents(status_filter=None):
     conn = get_connection()
     if status_filter:
@@ -229,15 +254,46 @@ def upsert_topic(topic_dict):
 def insert_self_training_log(log_id, empid, name, channel, topic_name, quiz_score=0.0):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name, quiz_score) VALUES (?, ?, ?, ?, ?, ?)",
-                   (log_id, empid, name, channel, topic_name, quiz_score))
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        INSERT INTO self_training_logs (id, empid, name, channel, topic_name, quiz_score, status, start_time) 
+        VALUES (?, ?, ?, ?, ?, ?, 'In Progress', ?)
+    """, (log_id, empid, name, channel, topic_name, quiz_score, now_str))
     conn.commit()
     
     row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
-    access_time = row['access_time'] if row else ""
+    access_time = row['access_time'] if row else now_str
     conn.close()
 
-    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, quiz_score, str(access_time)])
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, quiz_score, str(access_time), "In Progress", "", ""])
+
+def get_active_self_training(empid):
+    """Fetches any active or delayed training for the given EMP ID."""
+    auto_update_delayed_trainings()
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT * FROM self_training_logs 
+        WHERE empid = ? AND status IN ('In Progress', 'Delayed')
+        ORDER BY start_time DESC LIMIT 1
+    """, (empid,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def complete_self_training_log(log_id, quiz_score=0.0, delay_reason=""):
+    conn = get_connection()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("""
+        UPDATE self_training_logs 
+        SET status = 'Completed', completion_time = ?, quiz_score = ?, delay_reason = ?
+        WHERE id = ?
+    """, (now_str, quiz_score, delay_reason, log_id))
+    conn.commit()
+    
+    row = conn.execute("SELECT * FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
+    conn.close()
+    if row:
+        r = dict(row)
+        sync_to_gsheet("Self Training Log", [r['id'], r['empid'], r['name'], r['channel'], r['topic_name'], quiz_score, str(r['access_time']), "Completed", str(now_str), delay_reason])
 
 def update_self_training_score(log_id, quiz_score):
     conn = get_connection()
@@ -246,6 +302,7 @@ def update_self_training_score(log_id, quiz_score):
     conn.close()
 
 def get_self_training_logs():
+    auto_update_delayed_trainings()
     conn = get_connection()
     rows = conn.execute("SELECT * FROM self_training_logs ORDER BY access_time DESC").fetchall()
     conn.close()
