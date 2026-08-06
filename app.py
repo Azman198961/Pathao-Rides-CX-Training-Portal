@@ -5,13 +5,11 @@ import json
 from datetime import date, datetime, timedelta
 from io import BytesIO
 
-# ReportLab Library for Batch Report Generation
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# Database & Custom Certificate Modules
 import db
 try:
     import certificate as cert_generator
@@ -21,7 +19,6 @@ except ImportError:
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Custom CSS styling for Block / Card Container Visual Improvement
 st.markdown("""
 <style>
     .stMetric {
@@ -49,7 +46,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Helper Functions
 def format_embed_url(url):
     if not url: return ""
     if "/edit" in url: return url.split("/edit")[0] + "/embed"
@@ -88,9 +84,9 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     story.append(Paragraph(topics_str, sub_style))
     story.append(Spacer(1, 15))
 
-    story.append(Paragraph("<b>Induction Agent Scorecard:</b>", heading_style))
+    story.append(Paragraph("<b>Induction Employee Scorecard:</b>", heading_style))
     if not df_evals.empty:
-        table_data = [["EMP ID", "Agent Name", "Quiz 1", "Quiz 2", "Quiz 3", "Assign.", "Mock", "Live", "Final Score"]]
+        table_data = [["EMP ID", "Employee Name", "Quiz 1", "Quiz 2", "Quiz 3", "Assign.", "Mock", "Live", "Final Score"]]
         for _, row in df_evals.iterrows():
             table_data.append([
                 str(row.get('empid', '')),
@@ -118,13 +114,12 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
         ]))
         story.append(t)
     else:
-        story.append(Paragraph("No Induction agent evaluation data recorded.", sub_style))
+        story.append(Paragraph("No Induction employee evaluation data recorded.", sub_style))
 
     doc.build(story)
     buffer.seek(0)
     return buffer
 
-# Auth Session Setup
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
@@ -159,7 +154,7 @@ if is_admin_view:
     admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "📈 Dashboard",
         "📖 Training Logs",
-        "👥 Agent Directory", 
+        "👥 Employee Data", # Updated Tab Name
         "📊 Topics & Quiz Editor", 
         "🖥️ Training Viewer", 
         "📅 Calendar Planner", 
@@ -167,14 +162,13 @@ if is_admin_view:
         "🔁 Refresher Requests"
     ])
     
-    # 0. PERFORMANCE DASHBOARD (SPLIT INTO 2 PARTS)
+    # 0. PERFORMANCE DASHBOARD
     with admin_tab0:
         dash_sub1, dash_sub2 = st.tabs(["🔴 Induction Training Dashboard", "📘 Self Training Dashboard"])
         
-        # PART 1: INDUCTION DASHBOARD (Connected with Employment Status = 'Induction')
         with dash_sub1:
             st.header("🔴 Induction Training Performance Dashboard")
-            st.caption("This dashboard strictly connects with Agents whose Employment Status is set to 'Induction'.")
+            st.caption("This dashboard strictly connects with Employees whose Employment Status is set to 'Induction'.")
             
             batches = db.get_batch_schedules()
             evals = db.get_induction_evaluations()
@@ -188,7 +182,7 @@ if is_admin_view:
             with c_met2:
                 st.metric("Batch Status", active_batch['status'] if active_batch else "N/A")
             with c_met3:
-                st.metric("Induction Agents", len(df_evals) if not df_evals.empty else 0)
+                st.metric("Induction Employees", len(df_evals) if not df_evals.empty else 0)
             with c_met4:
                 avg_score = df_evals['final_score'].mean() if not df_evals.empty and 'final_score' in df_evals else 0
                 st.metric("Induction Avg Score", f"{avg_score:.1f}%")
@@ -217,18 +211,17 @@ if is_admin_view:
 
             with col_t2:
                 st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-                st.markdown("### 👤 Induction Agent Scoreboard")
+                st.markdown("### 👤 Induction Employee Scoreboard")
                 if not df_evals.empty:
                     st.dataframe(df_evals[['empid', 'agent_name', 'quiz1', 'quiz2', 'quiz3', 'assignment', 'mock_call', 'live_comm', 'final_score']], use_container_width=True)
                 else:
-                    st.info("No Induction Agent evaluation records found in database.")
+                    st.info("No Induction Employee evaluation records found in database.")
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.divider()
             pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
             st.download_button("📄 Download Live Induction Performance Summary (PDF)", pdf_bytes, "Induction_Summary.pdf", "application/pdf")
 
-        # PART 2: SELF TRAINING DASHBOARD (Connected with Self Training Logs)
         with dash_sub2:
             st.header("📘 Self Training Performance Dashboard")
             st.caption("This dashboard analyzes self-learning engagement and self-quiz scores from logs.")
@@ -241,7 +234,7 @@ if is_admin_view:
             else:
                 s_col1, s_col2, s_col3, s_col4 = st.columns(4)
                 s_col1.metric("Total Self-Training Sessions", len(df_logs))
-                s_col2.metric("Unique Participating Agents", df_logs['empid'].nunique())
+                s_col2.metric("Unique Participating Employees", df_logs['empid'].nunique())
                 
                 avg_q_score = df_logs['quiz_score'].mean() if 'quiz_score' in df_logs else 0.0
                 s_col3.metric("Avg Self-Quiz Score", f"{avg_q_score:.1f}%")
@@ -265,7 +258,7 @@ if is_admin_view:
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-                st.markdown("### 📋 Agent-wise Self Training Summary")
+                st.markdown("### 📋 Employee-wise Self Training Summary")
                 agent_summary = df_logs.groupby(['empid', 'name']).agg(
                     Total_Sessions=('id', 'count'),
                     Avg_Quiz_Score=('quiz_score', 'mean'),
@@ -274,7 +267,7 @@ if is_admin_view:
                 st.dataframe(agent_summary, use_container_width=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # 1. SELF TRAINING LOGS (WITH QUIZ SCORE VISIBILITY & EDITING)
+    # 1. SELF TRAINING LOGS
     with admin_tab_logs:
         st.header("📖 Self Training Activity Logs & Quiz Scores")
         logs = db.get_self_training_logs()
@@ -288,7 +281,7 @@ if is_admin_view:
             st.dataframe(df_logs[['id', 'empid', 'name', 'channel', 'topic_name', 'quiz_score', 'access_time']], use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-            with st.expander("📝 Update Agent Self-Quiz Score", expanded=False):
+            with st.expander("📝 Update Employee Self-Quiz Score", expanded=False):
                 with st.form("update_quiz_score_form"):
                     selected_log_id = st.selectbox("Select Log Entry ID", [l['id'] for l in logs])
                     new_quiz_score = st.number_input("Enter Quiz Score (%)", min_value=0.0, max_value=100.0, step=1.0)
@@ -299,36 +292,79 @@ if is_admin_view:
 
             st.download_button("📥 Export Logs (CSV)", df_logs.to_csv(index=False).encode('utf-8'), "Self_Training_Logs.csv", "text/csv")
 
-    # 2. AGENT DIRECTORY (WITH EMPLOYMENT STATUS = INDUCTION / REGULAR)
+    # 2. EMPLOYEE DATA (NEW FILE UPLOAD & UPDATED ENTRY FORM)
     with admin_tab1:
-        st.header("👥 Agent Directory & Employment Status")
+        st.header("👥 Employee Data & Employment Status")
+        
+        # BULK UPLOAD SECTION
+        st.markdown("<div class='card-box-info'>", unsafe_allow_html=True)
+        st.subheader("📁 Bulk Upload Employee Data (CSV / Excel)")
+        st.caption("Upload a file containing: **Name**, **EMP ID**, **Channel**, **Email Address**, **Phone Number** (Optional), **Employee Status**")
+        
+        up_file = st.file_uploader("Choose CSV or XLSX File", type=["csv", "xlsx"])
+        if up_file is not None:
+            try:
+                if up_file.name.endswith(".csv"):
+                    df_emp = pd.read_csv(up_file)
+                else:
+                    df_emp = pd.read_excel(up_file)
+                
+                st.write("📊 **Uploaded Data Preview:**")
+                st.dataframe(df_emp.head(10), use_container_width=True)
+                
+                if st.button("🚀 Process & Import Employees"):
+                    import_count = 0
+                    for _, r in df_emp.iterrows():
+                        e_id = str(r.get("EMP ID", r.get("empid", ""))).strip()
+                        e_name = str(r.get("Name", r.get("name", ""))).strip()
+                        e_email = str(r.get("Email Address", r.get("email", ""))).strip()
+                        e_phone = str(r.get("Phone Number", r.get("phone", ""))).strip()
+                        e_chan = str(r.get("Channel", r.get("channel", "Inbound Voice"))).strip()
+                        e_stat = str(r.get("Employee Status", r.get("employment_status", "Induction"))).strip()
+                        
+                        if e_id and e_name and e_email:
+                            db.upsert_agent(e_id, e_name, e_email, e_phone, e_chan, e_stat)
+                            import_count += 1
+                            
+                    st.success(f"Successfully imported {import_count} employee records!")
+                    st.rerun()
+            except Exception as ex:
+                st.error(f"Error processing file: {ex}")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # MANUAL ENTRY FORM
         st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-        with st.expander("➕ Add / Edit Agent Record", expanded=False):
+        with st.expander("➕ Add / Edit Single Employee Record", expanded=False):
             with st.form("agent_info_form"):
                 col1, col2 = st.columns(2)
                 ag_id = col1.text_input("EMP ID *")
-                ag_name = col2.text_input("Agent Name *")
+                ag_name = col2.text_input("Employee Name *")
+                
                 col3, col4 = st.columns(2)
                 ag_email = col3.text_input("Email Address *")
-                ag_phone = col4.text_input("Phone Number *")
+                ag_phone = col4.text_input("Phone Number")
                 
-                ag_status = st.selectbox("Employment Status *", ["Induction", "Regular", "Probation"])
+                col5, col6 = st.columns(2)
+                ag_chan = col5.selectbox("Channel *", CHANNEL_OPTIONS)
+                ag_status = col6.selectbox("Employee Status *", ["Induction", "Regular", "Probation"])
                 
-                if st.form_submit_button("💾 Save Agent"):
+                if st.form_submit_button("💾 Save Employee"):
                     if not ag_id or not ag_name or not ag_email:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
-                        db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip(), ag_status)
-                        st.success("Agent Info saved successfully!")
+                        db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip(), ag_chan, ag_status)
+                        st.success("Employee Record saved successfully!")
                         st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # DIRECTORY DISPLAY
         agents = db.get_agents()
         if agents:
+            st.subheader("📋 Registered Employee Directory")
             st.dataframe(pd.DataFrame(agents), use_container_width=True)
             for ag in agents:
                 c1, c2 = st.columns([4, 1])
-                c1.write(f"👤 **{ag['name']}** (`{ag['empid']}`) — Status: `{ag.get('employment_status', 'Induction')}`")
+                c1.write(f"👤 **{ag['name']}** (`{ag['empid']}`) | Channel: `{ag.get('channel', 'N/A')}` | Status: `{ag.get('employment_status', 'Induction')}`")
                 if c2.button(f"🗑️ Delete", key=f"del_ag_{ag['empid']}"):
                     db.delete_agent(ag['empid'])
                     st.rerun()
@@ -387,7 +423,7 @@ if is_admin_view:
                         else:
                             st.info("No Quiz Link Available.")
 
-    # 5. INDUCTION CALENDAR PLANNER (WITH FULL EDIT OPTION AND CHANGE LOG)
+    # 5. INDUCTION CALENDAR PLANNER
     with admin_tab3:
         st.header("📅 Induction Training Calendar Planner & Editor")
         
@@ -456,7 +492,6 @@ if is_admin_view:
                 data_list = json.loads(b['schedule_json'])
                 edit_history = json.loads(b.get('edit_history_json') or '[]')
                 
-                # Daily Status Tracker
                 has_changed = False
                 for i, item in enumerate(data_list):
                     if item.get("Activity / Topic") != "DAY OFF":
@@ -476,7 +511,6 @@ if is_admin_view:
                 df_sched = pd.DataFrame(data_list)
                 st.dataframe(df_sched, use_container_width=True)
 
-                # ADVANCED EDIT CALENDAR SECTION
                 st.markdown("---")
                 st.markdown("#### ✏️ Edit Saved Calendar & Log Changes")
                 with st.expander("📝 Modify Calendar Slots & Reason", expanded=False):
@@ -519,18 +553,18 @@ if is_admin_view:
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # 6. AGENT EVALUATION SYSTEM (ONLY CONNECTED TO EMPLOYEES WITH STATUS = 'Induction')
+    # 6. EMPLOYEE EVALUATION SYSTEM
     with admin_tab4:
-        st.header("📝 Agent Evaluation System")
-        st.caption("Only Agents with Employment Status = 'Induction' appear in this evaluation list.")
+        st.header("📝 Employee Evaluation System")
+        st.caption("Only Employees with Employment Status = 'Induction' appear in this evaluation list.")
         
         induction_evals = db.get_induction_evaluations()
         if not induction_evals:
-            st.info("No Agents currently marked as 'Induction' in Agent Directory.")
+            st.info("No Employees currently marked as 'Induction' in Employee Data.")
         else:
             for ev in induction_evals:
                 st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-                with st.expander(f"👤 Induction Agent: **{ev['agent_name']}** (`{ev['empid']}`)", expanded=True):
+                with st.expander(f"👤 Induction Employee: **{ev['agent_name']}** (`{ev['empid']}`)", expanded=True):
                     with st.form(f"eval_form_{ev['empid']}"):
                         c1, c2, c3, c4 = st.columns(4)
                         q1 = c1.number_input("Quiz 1 Score", min_value=0.0, max_value=100.0, value=float(ev['quiz1']), key=f"q1_{ev['empid']}")
@@ -562,7 +596,7 @@ if is_admin_view:
                 st.markdown("<div class='card-box'>", unsafe_allow_html=True)
                 c_info, c_action = st.columns([3, 2])
                 with c_info:
-                    st.markdown(f"### 👤 Agent: **{req['name']}** (`{req['empid']}`)")
+                    st.markdown(f"### 👤 Employee: **{req['name']}** (`{req['empid']}`)")
                     st.markdown(f"**Channel:** {req['channel']} | **Topic:** `{req['topic_name']}`")
                     st.markdown(f"🗓️ **Slot:** {req['preferred_slot']}")
                     st.write(f"**Status:** `{req['status']}` | **Training Status:** `{req.get('training_status', 'Pending')}`")
@@ -661,9 +695,9 @@ else:
                 eval_record = db.get_evaluation_by_id(cert_empid.strip())
                 if eval_record:
                     score = float(eval_record.get('final_score', 0.0))
-                    ag_name = eval_record.get('agent_name', 'Pathao Agent')
+                    ag_name = eval_record.get('agent_name', 'Pathao Employee')
                     
-                    st.info(f"Agent Name: **{ag_name}** | Final Score: **{score:.2f}%**")
+                    st.info(f"Employee Name: **{ag_name}** | Final Score: **{score:.2f}%**")
                     
                     if score >= 60.0:
                         st.success("🎉 Congratulations! You have successfully passed the Pathao CX Induction Training.")
