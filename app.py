@@ -5,18 +5,23 @@ import json
 from datetime import date, timedelta
 from io import BytesIO
 
-# ReportLab Library for PDF Generation (Report & Certificate)
-from reportlab.lib.pagesizes import letter, landscape
+# ReportLab Library for Batch Report Generation
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
+# Database & Custom Certificate Modules
 import db
+try:
+    import certificate as cert_generator
+except ImportError:
+    import cert_generator
 
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
-# Helper functions
+# Helper Functions
 def format_embed_url(url):
     if not url: return ""
     if "/edit" in url: return url.split("/edit")[0] + "/embed"
@@ -38,7 +43,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     story = []
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#D32F2F'), spaceAfter=10)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#E21B24'), spaceAfter=10)
     sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=15)
     heading_style = ParagraphStyle('HeadStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#111111'), spaceAfter=8)
 
@@ -73,7 +78,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
         
         t = Table(table_data, colWidths=[55, 110, 45, 45, 45, 45, 45, 45, 65])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#D32F2F')),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E21B24')),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -91,52 +96,13 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     buffer.seek(0)
     return buffer
 
-def generate_certificate(agent_name, empid, final_score):
-    """ Generates a Certificate PDF for Agents """
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
-    story = []
-
-    styles = getSampleStyleSheet()
-    cert_title = ParagraphStyle('CertTitle', parent=styles['Heading1'], fontSize=28, alignment=1, textColor=colors.HexColor('#D32F2F'), spaceAfter=15)
-    cert_sub = ParagraphStyle('CertSub', parent=styles['Normal'], fontSize=16, alignment=1, textColor=colors.HexColor('#333333'), spaceAfter=20)
-    agent_style = ParagraphStyle('AgentStyle', parent=styles['Heading2'], fontSize=22, alignment=1, textColor=colors.HexColor('#000000'), spaceAfter=15)
-    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontSize=13, alignment=1, textColor=colors.HexColor('#555555'), spaceAfter=30)
-    score_style = ParagraphStyle('ScoreStyle', parent=styles['Normal'], fontSize=14, alignment=1, textColor=colors.HexColor('#2E7D32'), spaceAfter=25)
-
-    story.append(Spacer(1, 20))
-    story.append(Paragraph("PATHAO RIDES CX ACADEMY", cert_title))
-    story.append(Paragraph("CERTIFICATE OF COMPLETION", cert_sub))
-    story.append(Paragraph("This is proudly presented to", ParagraphStyle('Pres', parent=styles['Normal'], fontSize=12, alignment=1, spaceAfter=10)))
-    story.append(Paragraph(f"<b>{agent_name}</b> (EMP ID: {empid})", agent_style))
-    story.append(Paragraph("for successfully completing the <b>Customer Experience (CX) Induction Training Program</b>.", body_style))
-    story.append(Paragraph(f"<b>Final Evaluation Performance Score: {final_score:.2f}%</b>", score_style))
-    story.append(Spacer(1, 30))
-    
-    sig_table = Table([
-        ["_________________________", "_________________________"],
-        ["Md Asikul Islam Azman", "Pathao CX Training Lead"],
-        ["Lead Trainer", "Authorized Signatory"]
-    ], colWidths=[300, 300])
-    sig_table.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#444444'))
-    ]))
-    story.append(sig_table)
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
-# Auth State
+# Auth Session Setup
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 with st.sidebar:
     st.title("🔴 Pathao")
-    st.caption("Rides CX")
+    st.caption("Rides CX Portal")
     st.divider()
     role = st.radio("Access Level:", ["Agent View", "Admin View"])
     
@@ -163,13 +129,13 @@ CHANNEL_OPTIONS = ["Inbound Voice", "Live Chat & Social Media", "Report Issue & 
 
 if is_admin_view:
     admin_tab0, admin_tab_logs, admin_tab1, admin_tab2, admin_tab_view, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
-        "📈 Performance Dashboard",
-        "📖 Self Training Logs",
+        "📈 Dashboard",
+        "📖 Training Logs",
         "👥 Agent Directory", 
         "📊 Topics & Quiz Editor", 
         "🖥️ Training Viewer", 
-        "📅 Induction Calendar Planner", 
-        "📝 Agent Evaluation", 
+        "📅 Calendar Planner", 
+        "📝 Evaluation System", 
         "🔁 Refresher Requests"
     ])
     
@@ -222,37 +188,23 @@ if is_admin_view:
 
         st.divider()
 
-        if active_batch and active_batch['status'] == 'Training Complete':
-            st.success("🎉 Training Complete! Download summary report below.")
-            pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
-            st.download_button("📄 Download Full Summary (PDF)", pdf_bytes, f"{active_batch['batch_name']}_Summary.pdf", "application/pdf")
-        else:
-            pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
-            st.download_button("📥 Download Current Summary (PDF)", pdf_bytes, "Induction_Live_Summary.pdf", "application/pdf")
+        pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
+        st.download_button("📄 Download Live Performance Summary (PDF)", pdf_bytes, "Induction_Summary.pdf", "application/pdf")
 
-    # SELF TRAINING LOGS
+    # 1. SELF TRAINING LOGS
     with admin_tab_logs:
         st.header("📖 Self Training Activity Logs")
-        st.caption("Logs of agents accessing self-training topics.")
-        
         logs = db.get_self_training_logs()
         if not logs:
             st.info("No self-training activities logged yet.")
         else:
             df_logs = pd.DataFrame(logs)
             st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time']], use_container_width=True)
-            
-            csv_logs = df_logs.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export Self Training Logs (CSV)",
-                data=csv_logs,
-                file_name="Self_Training_Logs.csv",
-                mime="text/csv"
-            )
+            st.download_button("📥 Export Logs (CSV)", df_logs.to_csv(index=False).encode('utf-8'), "Self_Training_Logs.csv", "text/csv")
 
-    # 1. AGENT DIRECTORY
+    # 2. AGENT DIRECTORY
     with admin_tab1:
-        st.header("👥 Induction Agent Information Directory")
+        st.header("👥 Agent Directory")
         with st.expander("➕ Add / Edit Agent Record", expanded=False):
             with st.form("agent_info_form"):
                 col1, col2 = st.columns(2)
@@ -267,7 +219,7 @@ if is_admin_view:
                         st.error("EMP ID, Name, and Email are required!")
                     else:
                         db.upsert_agent(ag_id.strip(), ag_name.strip(), ag_email.strip(), ag_phone.strip())
-                        st.success("Agent Info saved permanently!")
+                        st.success("Agent Info saved successfully!")
                         st.rerun()
 
         agents = db.get_agents()
@@ -278,7 +230,7 @@ if is_admin_view:
                     db.delete_agent(ag['empid'])
                     st.rerun()
 
-    # 2. TOPICS & QUIZ EDITOR
+    # 3. TOPICS & QUIZ EDITOR
     with admin_tab2:
         st.header("📊 Topics, Time & Quiz Form Manager")
         topics_list = db.get_topics()
@@ -298,48 +250,41 @@ if is_admin_view:
                             "slide_url": format_embed_url(new_slide.strip()),
                             "form_url": format_form_url(new_form.strip())
                         })
-                        st.success(f"Topic '{top['name']}' updated permanently!")
+                        st.success(f"Module '{top['name']}' updated successfully!")
                         st.rerun()
 
-    # TRAINING VIEWER
+    # 4. TRAINING VIEWER
     with admin_tab_view:
         st.header("🖥️ Admin Training Presentation Viewer")
-        st.caption("Select a topic directly to launch the presentation and quiz form during live training sessions.")
-        
         all_topics_admin = db.get_topics()
-        if not all_topics_admin:
-            st.warning("No training topics available.")
-        else:
+        if all_topics_admin:
             topic_names_admin = [t["name"] for t in all_topics_admin]
-            selected_topic_name = st.selectbox("🎯 Select Topic to Present:", ["-- Select Topic --"] + topic_names_admin, key="admin_topic_viewer_select")
+            selected_topic_name = st.selectbox("🎯 Select Topic to Present:", ["-- Select Topic --"] + topic_names_admin, key="admin_topic_select")
             
             if selected_topic_name != "-- Select Topic --":
                 selected_topic_obj = next((t for t in all_topics_admin if t["name"] == selected_topic_name), None)
-                
                 if selected_topic_obj:
                     st.divider()
                     st.markdown(f"## 📊 Module: **{selected_topic_obj['name']}**")
-                    st.caption(f"⏱️ Duration: {selected_topic_obj['duration']} | Assigned Trainer: {selected_topic_obj.get('trainer_name', 'Md Asikul islam Azman')}")
-
-                    adm_content_tab1, adm_content_tab2 = st.tabs(["📺 Presentation Slides", "📝 Quiz Form (Auto Loaded)"])
+                    adm_c1, adm_c2 = st.tabs(["📺 Presentation Slides", "📝 Auto Loaded Quiz"])
                     
-                    with adm_content_tab1:
+                    with adm_c1:
                         embed_slide = format_embed_url(selected_topic_obj.get("slide_url", ""))
                         if embed_slide:
                             st.components.v1.iframe(embed_slide, height=580, scrolling=False)
                         else:
-                            st.warning("No Slide Presentation available for this topic.")
+                            st.warning("No Presentation Available.")
                             
-                    with adm_content_tab2:
+                    with adm_c2:
                         embed_form = format_form_url(selected_topic_obj.get("form_url", ""))
                         if embed_form:
                             st.components.v1.iframe(embed_form, height=700, scrolling=True)
                         else:
-                            st.info("No Quiz Form link added for this topic.")
+                            st.info("No Quiz Link Available.")
 
-    # 3. INDUCTION CALENDAR PLANNER
+    # 5. INDUCTION CALENDAR PLANNER
     with admin_tab3:
-        st.header("📅 Induction Training Period Calendar Planner")
+        st.header("📅 Induction Training Calendar Planner")
         with st.form("period_select_form"):
             b_col1, b_col2, b_col3 = st.columns([2, 1.5, 1.5])
             batch_title = b_col1.text_input("Batch Name", value="Induction Batch - Rides")
@@ -391,10 +336,10 @@ if is_admin_view:
             if st.button("🚀 Save & Publish Calendar", type="primary"):
                 sched_id = str(uuid.uuid4())
                 db.save_batch_schedule(sched_id, planner_data['batch'], planner_data['from'], planner_data['to'], json.dumps(full_schedule_output), "In Progress", full_schedule_output=full_schedule_output)
-                st.success("Calendar published permanently and synced to GSheet!")
+                st.success("Calendar published and synced successfully!")
                 st.rerun()
 
-        st.subheader("📁 Saved Calendars & Daily Slot Status Tracker")
+        st.subheader("📁 Saved Calendars & Daily Tracker")
         batches = db.get_batch_schedules()
         for b in batches:
             with st.expander(f"📆 **{b['batch_name']}** ({b['start_date']} to {b['end_date']}) — `Status: {b['status']}`", expanded=True):
@@ -432,9 +377,9 @@ if is_admin_view:
                     db.delete_batch_schedule(b['id'])
                     st.rerun()
 
-    # 4. AGENT EVALUATION SYSTEM
+    # 6. AGENT EVALUATION SYSTEM
     with admin_tab4:
-        st.header("📝 Induction Agent Evaluation System")
+        st.header("📝 Agent Evaluation System")
         evals = db.get_evaluations()
         if evals:
             for ev in evals:
@@ -455,10 +400,10 @@ if is_admin_view:
                         
                         if st.form_submit_button("💾 Save Score"):
                             db.update_evaluation(ev['empid'], q1, q2, q3, ass, mock, live, auto_final)
-                            st.success(f"Score Saved permanently and synced to GSheet!")
+                            st.success("Score Saved permanently and synced!")
                             st.rerun()
 
-    # 5. REFRESHER REQUESTS MANAGEMENT
+    # 7. REFRESHER REQUESTS MANAGEMENT
     with admin_tab5:
         st.header("🔁 Refresher Training Requests Management")
         all_requests = db.get_refresher_requests()
@@ -472,9 +417,7 @@ if is_admin_view:
                         st.markdown(f"### 👤 Agent: **{req['name']}** (`{req['empid']}`)")
                         st.markdown(f"**Channel:** {req['channel']} | **Topic:** `{req['topic_name']}`")
                         st.markdown(f"🗓️ **Slot:** {req['preferred_slot']}")
-                        st.write(f"**Request Status:** `{req['status']}` | **Training Status:** `{req.get('training_status', 'Pending')}`")
-                        if req.get('rejection_reason'):
-                            st.error(f"Reason: {req['rejection_reason']}")
+                        st.write(f"**Status:** `{req['status']}` | **Training Status:** `{req.get('training_status', 'Pending')}`")
 
                     with c_action:
                         action = st.selectbox("Action", ["Select Action", "Accept Request", "Reject Request"], key=f"act_{req['id']}")
@@ -489,7 +432,7 @@ if is_admin_view:
                             reason = st.text_area("Rejection Reason *", key=f"rej_{req['id']}")
                             if st.button("Confirm Reject", key=f"rej_btn_{req['id']}"):
                                 if not reason.strip():
-                                    st.error("Please provide a reason for rejection!")
+                                    st.error("Provide a reason for rejection!")
                                 else:
                                     db.update_refresher_status(req['id'], "Rejected", reason.strip(), "Cancelled")
                                     st.rerun()
@@ -533,14 +476,14 @@ else:
         else:
             selected_topic = st.session_state.active_self_topic
             
-            if st.button("⬅️ Select Another Topic (Back to Form)"):
+            if st.button("⬅️ Back to Topic Selection"):
                 st.session_state.pop("active_self_topic", None)
                 st.rerun()
 
             st.markdown(f"## 📊 Module: **{selected_topic['name']}**")
             st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'Md Asikul islam Azman')}")
 
-            content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Take Quiz (Auto Loaded)"])
+            content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Auto Loaded Quiz"])
             
             with content_tab1:
                 embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
@@ -557,36 +500,50 @@ else:
                 else:
                     st.info("No Quiz Form link added for this topic yet.")
 
-    # 2. MY CERTIFICATE TAB
-    with agent_tab3 if False else agent_tab2:
-        st.subheader("🎓 Download Completion Certificate")
-        st.caption("Check your evaluation status and download your official CX Training Certificate.")
+    # 2. MY CERTIFICATE TAB (INTEGRATED WITH YOUR CERTIFICATE FILE)
+    with agent_tab2:
+        st.subheader("🎓 Download Official Completion Certificate")
+        st.caption("Check your final evaluation score and download your Pathao CX Training Certificate.")
         
-        cert_empid = st.text_input("Enter EMP ID to check Certificate", value=st.session_state.get("current_agent_empid", ""))
+        cert_empid = st.text_input("Enter your EMP ID", value=st.session_state.get("current_agent_empid", ""))
         
-        if st.button("🔍 Check Certificate Status"):
-            if cert_empid:
+        if st.button("🔍 Verify & Download Certificate"):
+            if cert_empid.strip():
                 eval_record = db.get_evaluation_by_id(cert_empid.strip())
                 if eval_record:
-                    score = float(eval_record.get('final_score', 0))
-                    ag_name = eval_record.get('agent_name', 'Agent')
+                    score = float(eval_record.get('final_score', 0.0))
+                    ag_name = eval_record.get('agent_name', 'Pathao Agent')
                     
                     st.info(f"Agent Name: **{ag_name}** | Final Score: **{score:.2f}%**")
+                    
                     if score >= 60.0:
-                        st.success("🎉 Congratulations! You passed the training evaluation.")
-                        cert_bytes = generate_certificate(ag_name, cert_empid.strip(), score)
-                        st.download_button("📄 Download Official Certificate (PDF)", cert_bytes, f"Certificate_{cert_empid}.pdf", "application/pdf")
+                        st.success("🎉 Congratulations! You have successfully passed the Pathao CX Induction Training.")
+                        
+                        # Generating PDF Bytes using your certificate module
+                        cert_bytes = cert_generator.generate_certificate(
+                            agent_name=ag_name,
+                            topic_name="Pathao CX Induction Training Module",
+                            score=score,
+                            date_str=date.today().strftime("%d %B, %Y")
+                        )
+                        
+                        st.download_button(
+                            label="📄 Download Official PDF Certificate",
+                            data=cert_bytes,
+                            file_name=f"Pathao_Certificate_{cert_empid.strip()}.pdf",
+                            mime="application/pdf"
+                        )
                     else:
-                        st.warning("⚠️ Passing score required for Certificate generation is 60%. Current Score is below threshold.")
+                        st.warning("⚠️ Passing score required for Certificate is 60.0%. Please contact your trainer.")
                 else:
-                    st.error("No Evaluation record found for this EMP ID.")
+                    st.error("No Evaluation record found for this EMP ID in database.")
             else:
-                st.error("Please provide a valid EMP ID.")
+                st.error("Please enter a valid EMP ID.")
 
     # 3. REQUEST REFRESHER SESSION TAB
     with agent_tab3:
-        st.subheader("🔁 Request Training Session")
-        st.caption("Request a specialized refresher session with a trainer.")
+        st.subheader("🔁 Request Refresher Training Session")
+        st.caption("Request a specialized training session with a trainer.")
         
         topics = db.get_topics()
         t_opts = [t["name"] for t in topics] if topics else []
@@ -604,7 +561,7 @@ else:
             r_date = col1.date_input("Available Date *", value=date.today())
             r_time = col2.selectbox("Available Time Slot *", ["-- Select Slot --", "10:00 AM - 01:00 PM", "02:00 PM - 05:00 PM", "05:00 PM - 08:00 PM"])
             
-            if st.form_submit_button("📩 Request Training Session"):
+            if st.form_submit_button("📩 Submit Request"):
                 if not a_name or not a_id or a_chan == "-- Select Channel --" or a_topic == "-- Select Topic --" or r_time == "-- Select Slot --":
                     st.error("All fields marked with (*) are required!")
                 else:
