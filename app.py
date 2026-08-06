@@ -19,29 +19,52 @@ except ImportError:
 st.set_page_config(page_title="Pathao CX Training Portal", page_icon="🔴", layout="wide")
 db.init_db()
 
+# --- CSS FIX FOR DARK/LIGHT MODE CONTRAST ---
 st.markdown("""
 <style>
-    .stMetric {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    /* Metric Card Fix */
+    div[data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        border: 1px solid #dcdcdc !important;
+        border-radius: 10px !important;
+        padding: 15px !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
     }
+    div[data-testid="stMetric"] * {
+        color: #111111 !important;
+    }
+    div[data-testid="stMetricLabel"] > div {
+        color: #555555 !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stMetricValue"] > div {
+        color: #E21B24 !important;
+        font-weight: bold !important;
+    }
+
+    /* Custom Container Box Fix */
     .card-box {
-        background-color: #ffffff;
-        border-left: 5px solid #E21B24;
-        border-radius: 8px;
-        padding: 18px;
-        margin-bottom: 15px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        border-left: 5px solid #E21B24 !important;
+        border-radius: 8px !important;
+        padding: 18px !important;
+        margin-bottom: 15px !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08) !important;
+    }
+    .card-box * {
+        color: #111111 !important;
     }
     .card-box-info {
-        background-color: #f1f3f5;
-        border-left: 5px solid #1c7ed6;
-        border-radius: 8px;
-        padding: 18px;
-        margin-bottom: 15px;
+        background-color: #f8f9fa !important;
+        color: #111111 !important;
+        border-left: 5px solid #1c7ed6 !important;
+        border-radius: 8px !important;
+        padding: 18px !important;
+        margin-bottom: 15px !important;
+    }
+    .card-box-info * {
+        color: #111111 !important;
     }
 </style>
 """, unsafe_allow_html=True)
