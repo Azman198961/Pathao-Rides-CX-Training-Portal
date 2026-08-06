@@ -95,7 +95,7 @@ def generate_pdf_report(batch_info, covered_topics, df_evals):
     buffer.seek(0)
     return buffer
 
-# Session State
+# Session State Initialization
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
@@ -123,7 +123,7 @@ with st.sidebar:
     st.sidebar.divider()
     if st.sidebar.button("🧪 Test Google Sheet Connection"):
         try:
-            db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02"])
+            db.sync_to_gsheet("Self Training Log", ["TEST_ID", "12345", "Test Agent", "Inbound Voice", "Fare", "2026-08-02", "In Progress"])
             st.sidebar.success("Test Data Sent Successfully!")
         except Exception as e:
             st.sidebar.error(f"Test Failed: {e}")
@@ -204,17 +204,17 @@ if is_admin_view:
             pdf_bytes = generate_pdf_report(active_batch, covered_topics, df_evals)
             st.download_button("📥 Download Current Summary (PDF)", pdf_bytes, "Induction_Live_Summary.pdf", "application/pdf")
 
-    # SELF TRAINING LOGS
+    # SELF TRAINING LOGS (Updated with Status)
     with admin_tab_logs:
         st.header("📖 Self Training Activity Logs")
-        st.caption("Logs of agents accessing self-training topics.")
+        st.caption("Logs of agents accessing self-training topics along with completion status.")
         
         logs = db.get_self_training_logs()
         if not logs:
             st.info("No self-training activities logged yet.")
         else:
             df_logs = pd.DataFrame(logs)
-            st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time']], width="stretch")
+            st.dataframe(df_logs[['empid', 'name', 'channel', 'topic_name', 'access_time', 'status']], width="stretch")
             
             csv_logs = df_logs.to_csv(index=False).encode('utf-8')
             st.download_button(
@@ -224,14 +224,13 @@ if is_admin_view:
                 mime="text/csv"
             )
 
-    # 1. AGENT DIRECTORY (Bulk Upload & Live Status Update)
+    # 1. AGENT DIRECTORY
     with admin_tab1:
         st.header("👥 Agent Information Directory")
         st.caption("Upload employee database via CSV/Excel or manage records manually.")
 
         col_left, col_right = st.columns([1.5, 1])
 
-        # Bulk Upload Section
         with col_left:
             st.subheader("📤 Bulk Upload Employee Sheet")
             uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx", "xls"])
@@ -258,7 +257,6 @@ if is_admin_view:
                 except Exception as e:
                     st.error(f"Error reading file: {e}")
 
-        # Manual Single Entry Section
         with col_right:
             st.subheader("➕ Add Single Agent")
             with st.form("add_single_agent_form"):
@@ -284,7 +282,6 @@ if is_admin_view:
 
         st.divider()
 
-        # Directory Table & Status Management
         st.subheader("📋 Registered Agents Directory")
         agents = db.get_agents()
 
@@ -626,62 +623,106 @@ else:
     st.header("Agent Self-Service Hub")
     agent_tab1, agent_tab2 = st.tabs(["📖 Self Training", "🔁 Request Refresher Session"])
     
-    # 1. SELF TRAINING TAB
+    # 1. SELF TRAINING TAB (Updated Strict Progress Logic)
     with agent_tab1:
+        st.subheader("📖 Self Training Hub")
+        
         all_topics = db.get_topics()
         topic_names = [t["name"] for t in all_topics] if all_topics else []
 
-        if "active_self_topic" not in st.session_state:
-            st.subheader("📚 Start Self Training Module")
-            st.caption("Enter your details and select a topic to open training materials.")
-            
-            with st.form("self_training_start_form"):
-                c1, c2 = st.columns(2)
-                s_name = c1.text_input("Employee Name *")
-                s_empid = c2.text_input("EMP ID *")
+        # Step 1: Agent Identification & Lock Check
+        if "agent_verified_id" not in st.session_state:
+            with st.form("verify_agent_form"):
+                st.caption("Enter your Employee details to access self-training modules.")
+                v_empid = st.text_input("EMP ID *").strip()
+                v_name = st.text_input("Employee Name *").strip()
+                v_channel = st.selectbox("Channel *", ["-- Select Channel --"] + CHANNEL_OPTIONS)
                 
-                c3, c4 = st.columns(2)
-                s_channel = c3.selectbox("Channel *", ["-- Select Channel --"] + CHANNEL_OPTIONS)
-                s_topic = c4.selectbox("Select Training Topic *", ["-- Select Topic --"] + topic_names)
-                
-                if st.form_submit_button("🚀 Start Training"):
-                    if not s_name or not s_empid or s_channel == "-- Select Channel --" or s_topic == "-- Select Topic --":
-                        st.error("All fields marked with (*) are required!")
+                if st.form_submit_button("Verify & Access Training"):
+                    if not v_empid or not v_name or v_channel == "-- Select Channel --":
+                        st.error("Please fill in all required (*) fields!")
                     else:
-                        selected_obj = next((t for t in all_topics if t["name"] == s_topic), None)
-                        if selected_obj:
-                            try:
-                                log_id = str(uuid.uuid4())
-                                db.insert_self_training_log(log_id, s_empid.strip(), s_name.strip(), s_channel, s_topic)
-                                st.session_state.active_self_topic = selected_obj
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Log Error: {e}")
+                        st.session_state.agent_verified_id = v_empid
+                        st.session_state.agent_name = v_name
+                        st.session_state.agent_channel = v_channel
+                        st.rerun()
         else:
-            selected_topic = st.session_state.active_self_topic
+            emp_id = st.session_state.agent_verified_id
+            emp_name = st.session_state.agent_name
+            emp_channel = st.session_state.agent_channel
+
+            c_usr, c_out = st.columns([4, 1])
+            c_usr.info(f"👤 Logged in as: **{emp_name}** (`{emp_id}`) | Channel: **{emp_channel}**")
             
-            if st.button("⬅️ Select Another Topic (Back to Form)"):
-                st.session_state.pop("active_self_topic", None)
+            if c_out.button("🚪 Logout"):
+                st.session_state.pop("agent_verified_id", None)
+                st.session_state.pop("agent_name", None)
+                st.session_state.pop("agent_channel", None)
                 st.rerun()
 
-            st.markdown(f"## 📊 Module: **{selected_topic['name']}**")
-            st.caption(f"⏱️ Duration: {selected_topic['duration']} | Assigned Trainer: {selected_topic.get('trainer_name', 'Md Asikul islam Azman')}")
+            st.divider()
 
-            content_tab1, content_tab2 = st.tabs(["📺 Study Presentation", "📝 Take Quiz Form"])
-            
-            with content_tab1:
-                embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
-                if embed_slide:
-                    st.iframe(embed_slide, height=560)
-                else:
-                    st.warning("No Slide Presentation available.")
+            # Check DB if agent has any 'In Progress' training session
+            active_session = db.get_active_agent_training(emp_id)
+
+            # CASE A: Pending/In-Progress Training Found (Lock Screen Activated)
+            if active_session:
+                st.warning(f"⚠️ **In-Progress Training Lock:** You have an unfinished training session on **{active_session['topic_name']}**.")
+                st.caption("You cannot start a new topic until you complete this training slide and submit the quiz.")
+
+                selected_topic = next((t for t in all_topics if t["name"] == active_session['topic_name']), None)
+
+                if selected_topic:
+                    st.markdown(f"## 📊 Resume Module: **{selected_topic['name']}**")
                     
-            with content_tab2:
-                embed_form = format_form_url(selected_topic.get("form_url", ""))
-                if embed_form:
-                    st.iframe(embed_form, height=700)
-                else:
-                    st.info("No Quiz Form link added for this topic yet.")
+                    step_key = f"step_{active_session['id']}"
+                    if step_key not in st.session_state:
+                        st.session_state[step_key] = "slides"
+
+                    # Slide Phase
+                    if st.session_state[step_key] == "slides":
+                        st.subheader("Step 1 of 2: Overview All Presentation Slides")
+                        embed_slide = format_embed_url(selected_topic.get("slide_url", ""))
+                        if embed_slide:
+                            st.iframe(embed_slide, height=550)
+                        else:
+                            st.warning("No Slide Presentation available for this topic.")
+
+                        st.markdown("---")
+                        if st.button("➡️ I have reviewed all slides, Proceed to Quiz", type="primary"):
+                            st.session_state[step_key] = "quiz"
+                            st.rerun()
+
+                    # Quiz Phase
+                    elif st.session_state[step_key] == "quiz":
+                        st.subheader("Step 2 of 2: Submit Evaluation Quiz")
+                        embed_form = format_form_url(selected_topic.get("form_url", ""))
+                        if embed_form:
+                            st.iframe(embed_form, height=650)
+                        else:
+                            st.info("No Quiz Form link added for this topic.")
+
+                        st.markdown("---")
+                        if st.button("✅ I have submitted the Quiz (Mark Training Complete)", type="primary"):
+                            db.mark_self_training_complete(active_session['id'])
+                            st.success("🎉 Congratulations! Training marked as Completed.")
+                            st.session_state.pop(step_key, None)
+                            st.rerun()
+
+            # CASE B: No Pending Training (Agent can pick a new topic)
+            else:
+                st.subheader("📚 Start New Training Module")
+                with st.form("start_new_training_form"):
+                    selected_topic_name = st.selectbox("Select Training Topic *", ["-- Select Topic --"] + topic_names)
+                    
+                    if st.form_submit_button("🚀 Start Training"):
+                        if selected_topic_name == "-- Select Topic --":
+                            st.error("Please select a topic!")
+                        else:
+                            log_id = str(uuid.uuid4())
+                            db.insert_self_training_log(log_id, emp_id, emp_name, emp_channel, selected_topic_name)
+                            st.toast(f"Training started for '{selected_topic_name}'!")
+                            st.rerun()
 
     # 2. REQUEST REFRESHER SESSION TAB
     with agent_tab2:
