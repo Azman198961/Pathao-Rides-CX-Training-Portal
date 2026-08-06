@@ -11,7 +11,6 @@ def sync_to_gsheet(sheet_name, row_data):
     """Appends a new row to the specified tab in Google Sheets using Streamlit Secrets."""
     try:
         if "gcp_service_account" not in st.secrets:
-            st.error("❌ GSheet Sync Error: 'gcp_service_account' missing in Streamlit Secrets!")
             return
 
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -36,15 +35,22 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Agents Table
+    # Agents Table (Added employment_status)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             empid TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
-            phone TEXT
+            phone TEXT,
+            employment_status TEXT DEFAULT 'Induction'
         )
     """)
+    
+    # Check if employment_status column exists in agents for older databases
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'employment_status' not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN employment_status TEXT DEFAULT 'Induction'")
     
     # Topics Table
     cursor.execute("""
@@ -58,7 +64,7 @@ def init_db():
         )
     """)
     
-    # Self Training Logs
+    # Self Training Logs (Added quiz_score)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS self_training_logs (
             id TEXT PRIMARY KEY,
@@ -66,11 +72,17 @@ def init_db():
             name TEXT,
             channel TEXT,
             topic_name TEXT,
+            quiz_score REAL DEFAULT 0.0,
             access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
-    # Batch Schedules
+    cursor.execute("PRAGMA table_info(self_training_logs)")
+    log_cols = [col[1] for col in cursor.fetchall()]
+    if 'quiz_score' not in log_cols:
+        cursor.execute("ALTER TABLE self_training_logs ADD COLUMN quiz_score REAL DEFAULT 0.0")
+
+    # Batch Schedules (Added edit_history_json)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS batch_schedules (
             id TEXT PRIMARY KEY,
@@ -78,10 +90,16 @@ def init_db():
             start_date TEXT,
             end_date TEXT,
             schedule_json TEXT,
-            status TEXT
+            status TEXT,
+            edit_history_json TEXT DEFAULT '[]'
         )
     """)
     
+    cursor.execute("PRAGMA table_info(batch_schedules)")
+    sched_cols = [col[1] for col in cursor.fetchall()]
+    if 'edit_history_json' not in sched_cols:
+        cursor.execute("ALTER TABLE batch_schedules ADD COLUMN edit_history_json TEXT DEFAULT '[]'")
+
     # Evaluations
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS evaluations (
@@ -114,7 +132,7 @@ def init_db():
     
     conn.commit()
     
-    # --- Exact 8 Topics Seeding with Slides and Default Embedded Quizzes ---
+    # Exact 8 Topics Seeding
     exact_topics = [
         ("t1", "Fare", "02:00 HR", "Md Asikul islam Azman", 
          "https://docs.google.com/presentation/d/136RdIr9tshx3OMd8nFRhCj_aTo84p9c-XAJFKDrrw-k/embed", 
@@ -152,25 +170,29 @@ def init_db():
     conn.commit()
     conn.close()
 
-def get_agents():
+def get_agents(status_filter=None):
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM agents").fetchall()
+    if status_filter:
+        rows = conn.execute("SELECT * FROM agents WHERE employment_status=?", (status_filter,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM agents").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
-def upsert_agent(empid, name, email, phone):
+def upsert_agent(empid, name, email, phone, employment_status='Induction'):
     conn = get_connection()
     conn.execute("""
-        INSERT INTO agents (empid, name, email, phone) 
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?
-    """, (empid, name, email, phone, name, email, phone))
+        INSERT INTO agents (empid, name, email, phone, employment_status) 
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(empid) DO UPDATE SET name=?, email=?, phone=?, employment_status=?
+    """, (empid, name, email, phone, employment_status, name, email, phone, employment_status))
     
-    conn.execute("""
-        INSERT INTO evaluations (empid, agent_name) 
-        VALUES (?, ?)
-        ON CONFLICT(empid) DO UPDATE SET agent_name=?
-    """, (empid, name, name))
+    if employment_status == 'Induction':
+        conn.execute("""
+            INSERT INTO evaluations (empid, agent_name) 
+            VALUES (?, ?)
+            ON CONFLICT(empid) DO UPDATE SET agent_name=?
+        """, (empid, name, name))
     
     conn.commit()
     conn.close()
@@ -201,18 +223,24 @@ def upsert_topic(topic_dict):
     conn.commit()
     conn.close()
 
-def insert_self_training_log(log_id, empid, name, channel, topic_name):
+def insert_self_training_log(log_id, empid, name, channel, topic_name, quiz_score=0.0):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name) VALUES (?, ?, ?, ?, ?)",
-                   (log_id, empid, name, channel, topic_name))
+    cursor.execute("INSERT INTO self_training_logs (id, empid, name, channel, topic_name, quiz_score) VALUES (?, ?, ?, ?, ?, ?)",
+                   (log_id, empid, name, channel, topic_name, quiz_score))
     conn.commit()
     
     row = cursor.execute("SELECT access_time FROM self_training_logs WHERE id=?", (log_id,)).fetchone()
     access_time = row['access_time'] if row else ""
     conn.close()
 
-    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, str(access_time)])
+    sync_to_gsheet("Self Training Log", [log_id, empid, name, channel, topic_name, quiz_score, str(access_time)])
+
+def update_self_training_score(log_id, quiz_score):
+    conn = get_connection()
+    conn.execute("UPDATE self_training_logs SET quiz_score=? WHERE id=?", (quiz_score, log_id))
+    conn.commit()
+    conn.close()
 
 def get_self_training_logs():
     conn = get_connection()
@@ -239,6 +267,15 @@ def save_batch_schedule(sched_id, batch_name, start_date, end_date, json_str, st
                 item.get("Status", "")
             ])
 
+def update_batch_schedule_full(sched_id, json_str, edit_history_json, status=None):
+    conn = get_connection()
+    if status:
+        conn.execute("UPDATE batch_schedules SET schedule_json=?, edit_history_json=?, status=? WHERE id=?", (json_str, edit_history_json, status, sched_id))
+    else:
+        conn.execute("UPDATE batch_schedules SET schedule_json=?, edit_history_json=? WHERE id=?", (json_str, edit_history_json, sched_id))
+    conn.commit()
+    conn.close()
+
 def get_batch_schedules():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM batch_schedules ORDER BY rowid DESC").fetchall()
@@ -259,6 +296,16 @@ def delete_batch_schedule(sched_id):
     conn.execute("DELETE FROM batch_schedules WHERE id=?", (sched_id,))
     conn.commit()
     conn.close()
+
+def get_induction_evaluations():
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT e.* FROM evaluations e
+        INNER JOIN agents a ON e.empid = a.empid
+        WHERE a.employment_status = 'Induction'
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def get_evaluations():
     conn = get_connection()
